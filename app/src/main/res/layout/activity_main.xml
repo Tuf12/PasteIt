@@ -1,21 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:background="#f0f0f0"
     android:orientation="vertical"
     android:padding="16dp"
-    android:background="#f0f0f0">
+    android:paddingTop="?attr/actionBarSize">
 
     <!-- Control Buttons Row -->
+
+    <!-- Expand/Collapse Button -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center"
-        android:padding="8dp"
         android:background="#333333"
-        android:elevation="4dp">
+        android:elevation="4dp"
+        android:gravity="center"
+        android:orientation="horizontal"
+        android:layout_marginTop="30dp"
+        android:padding="4dp">
 
         <ImageButton
             android:id="@+id/rewindButton"
@@ -23,9 +27,9 @@
             android:layout_height="48dp"
             android:layout_margin="4dp"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:src="@android:drawable/ic_media_rew"
             android:contentDescription="@string/rewind"
-            android:enabled="false" />
+            android:enabled="false"
+            android:src="@android:drawable/ic_media_rew" />
 
         <ImageButton
             android:id="@+id/playButton"
@@ -33,9 +37,9 @@
             android:layout_height="64dp"
             android:layout_margin="4dp"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:src="@android:drawable/ic_media_play"
             android:contentDescription="@string/play_pause"
-            android:enabled="false" />
+            android:enabled="false"
+            android:src="@android:drawable/ic_media_play" />
 
         <ImageButton
             android:id="@+id/pasteButton"
@@ -43,9 +47,9 @@
             android:layout_height="48dp"
             android:layout_margin="4dp"
             android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/paste_from_clipboard"
             app:srcCompat="@drawable/baseline_content_paste_24"
-            app:tint="#333333"
-            android:contentDescription="@string/paste_from_clipboard" />
+            app:tint="#ffffff" />
 
 
         <ImageButton
@@ -54,9 +58,9 @@
             android:layout_height="48dp"
             android:layout_margin="4dp"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:src="@android:drawable/ic_media_ff"
             android:contentDescription="@string/fast_forward"
-            android:enabled="false" />
+            android:enabled="false"
+            android:src="@android:drawable/ic_media_ff" />
 
         <ImageButton
             android:id="@+id/settingsButton"
@@ -64,30 +68,18 @@
             android:layout_height="48dp"
             android:layout_margin="4dp"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:src="@android:drawable/ic_menu_preferences"
-            android:contentDescription="@string/settings" />
+            android:contentDescription="@string/settings"
+            android:src="@android:drawable/ic_menu_preferences" />
 
     </LinearLayout>
-
-    <!-- Expand/Collapse Button -->
-    <Button
-        android:id="@+id/expandButton"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:text="@string/show_text"
-        android:background="?attr/selectableItemBackground"
-        android:textColor="#666666"
-        android:textSize="14sp"
-        />
 
     <!-- Expandable Text Container -->
     <ScrollView
         android:id="@+id/textContainer"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1"
         android:layout_marginTop="8dp"
+        android:layout_weight="1"
         android:background="#ffffff"
         android:elevation="2dp"
         android:visibility="gone">
@@ -96,23 +88,34 @@
             android:id="@+id/textDisplay"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:lineSpacingExtra="4dp"
             android:padding="16dp"
             android:text="@string/copy_some_text_to_get_started"
-            android:textSize="16sp"
-            android:lineSpacingExtra="4dp"
-            android:textColor="#333333" />
+            android:textColor="#333333"
+            android:textSize="16sp" />
 
     </ScrollView>
 
     <!-- Status Text (when collapsed) -->
+
+    <Button
+        android:id="@+id/expandButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:background="?attr/selectableItemBackground"
+        android:text="@string/show_text"
+        android:textColor="#666666"
+        android:textSize="14sp" />
+
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="16dp"
+        android:lineSpacingExtra="2dp"
         android:text="@string/pasteit_is_ready_copy_any_text_and_it_will_appear_here_for_reading_press_and_hold_the_play_button_to_enter_picture_in_picture_mode"
         android:textAlignment="center"
-        android:textSize="14sp"
         android:textColor="#666666"
-        android:lineSpacingExtra="2dp" />
+        android:textSize="14sp" />
 
 </LinearLayout>

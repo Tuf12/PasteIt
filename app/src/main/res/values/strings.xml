@@ -22,4 +22,11 @@
     <string name="percent_int">%1$d%%</string>
     <string name="paste_from_clipboard">pasted_from_clipboard</string>
     <string name="nothing_on_clipboard">nothing_on_clipboard</string>
+    <string name="voice_info">Current voice: %1$s</string>
+    <string name="voice_info_default">Alba (British English) - Sherpa ONNX</string>
+    <string name="loading_tts">Loading TTS…</string>
+    <string name="playing">Playing…</string>
+    <string name="tts_init_failed">Failed to initialize TTS engine</string>
+    <string name="tts_error">TTS Error: %1$s</string>
+    <string name="tts_not_ready">TTS engine is not ready yet</string>
 </resources>

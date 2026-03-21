@@ -82,67 +82,7 @@
 
         </LinearLayout>
 
-        <!-- Speech Pitch Settings -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:layout_marginBottom="24dp"
-            android:background="#ffffff"
-            android:padding="16dp"
-            android:elevation="2dp">
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/speech_pitch"
-                android:textSize="18sp"
-                android:textStyle="bold"
-                android:layout_marginBottom="8dp"
-                android:textColor="#666666" />
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/low"
-                    android:textSize="12sp"
-                    android:textColor="#666666" />
-
-                <SeekBar
-                    android:id="@+id/speechPitchSeekBar"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:layout_margin="8dp" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/high"
-                    android:textSize="12sp"
-                    android:textColor="#666666" />
-
-            </LinearLayout>
-
-            <TextView
-                android:id="@+id/pitchValue"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/_100"
-                android:textAlignment="center"
-                android:textSize="14sp"
-                android:textStyle="bold"
-                android:textColor="#666666" />
-
-        </LinearLayout>
-
-        <!-- Voice Selection -->
+        <!-- Voice Info -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -161,11 +101,13 @@
                 android:layout_marginBottom="8dp"
                 android:textColor="#666666" />
 
-            <Spinner
-                android:id="@+id/voiceSpinner"
+            <TextView
+                android:id="@+id/voiceInfoText"
                 android:layout_width="match_parent"
-                android:layout_height="48dp"
-                android:textColor="#666666" />
+                android:layout_height="wrap_content"
+                android:text="@string/voice_info_default"
+                android:textSize="14sp"
+                android:textColor="#888888" />
 
         </LinearLayout>
 

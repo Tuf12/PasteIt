@@ -1,16 +1,26 @@
 // MainActivity.kt - Clean Enhanced Version
 package com.example.pasteit
 
-import android.app.*
-import android.content.*
+import android.app.PictureInPictureParams
+import android.content.ClipboardManager
+import android.content.ComponentName
+import android.content.Intent
+import android.content.ServiceConnection
+import android.content.SharedPreferences
 import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
 import android.util.Log
 import android.util.Rational
+import android.text.method.LinkMovementMethod
 import android.view.View
-import android.widget.*
+import android.widget.Button
+import android.widget.ImageButton
+import android.widget.ScrollView
+import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+
 
 class MainActivity : AppCompatActivity() {
     private lateinit var playButton: ImageButton
@@ -41,8 +51,8 @@ class MainActivity : AppCompatActivity() {
                 runOnUiThread {
                     Log.d("PasteItMain", "Received clipboard text: ${clipText.take(50)}...")
 
-                    // Always update the text display with new content
-                    textDisplay.text = clipText
+                    // Render markdown for a clean on-screen read (TTS uses plain text in the service)
+                    textDisplay.text = MarkdownFormatter.markdownToSpanned(clipText)
 
                     // Reset play button state
                     playButton.setImageResource(android.R.drawable.ic_media_play)
@@ -94,7 +104,7 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        preferences = getSharedPreferences("PasteItSettings", Context.MODE_PRIVATE)
+        preferences = getSharedPreferences("PasteItSettings", MODE_PRIVATE)
 
         initializeViews()
         setupClickListeners()
@@ -123,6 +133,7 @@ class MainActivity : AppCompatActivity() {
         fastForwardButton = findViewById(R.id.fastForwardButton)
         settingsButton = findViewById(R.id.settingsButton)
         textDisplay = findViewById(R.id.textDisplay)
+        textDisplay.movementMethod = LinkMovementMethod.getInstance()
         expandButton = findViewById(R.id.expandButton)
         textContainer = findViewById(R.id.textContainer)
         pasteButton = findViewById(R.id.pasteButton)
@@ -165,7 +176,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun pasteFromClipboard(): Boolean {
-        val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        val cm = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
         val clip = cm.primaryClip
         if (clip != null && clip.itemCount > 0) {
             val text = clip.getItemAt(0).coerceToText(this).toString()
@@ -207,7 +218,7 @@ class MainActivity : AppCompatActivity() {
         } else {
             startService(serviceIntent)
         }
-        bindService(serviceIntent, serviceConnection, Context.BIND_AUTO_CREATE)
+        bindService(serviceIntent, serviceConnection, BIND_AUTO_CREATE)
     }
 
 

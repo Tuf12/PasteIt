@@ -1,31 +1,28 @@
-// SettingsActivity.kt
 package com.example.pasteit
 
-import android.content.Context
 import android.content.SharedPreferences
 import android.os.Bundle
-import android.speech.tts.TextToSpeech
-import android.widget.*
+import android.widget.Button
+import android.widget.SeekBar
+import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.content.edit
 
 class SettingsActivity : AppCompatActivity() {
     private lateinit var speechRateSeekBar: SeekBar
-    private lateinit var speechPitchSeekBar: SeekBar
-    private lateinit var voiceSpinner: Spinner
     private lateinit var testButton: Button
     private lateinit var backButton: Button
-    private var availableVoices = mutableListOf<android.speech.tts.Voice>()
-    private lateinit var voiceAdapter: ArrayAdapter<String>
+    private lateinit var voiceInfoText: TextView
 
     private lateinit var preferences: SharedPreferences
-    private var testTTS: TextToSpeech? = null
+    private var testTTS: SherpaOnnxTts? = null
+    private var ttsReady = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_settings)
 
-        preferences = getSharedPreferences("PasteItSettings", Context.MODE_PRIVATE)
+        preferences = getSharedPreferences("PasteItSettings", MODE_PRIVATE)
 
         initializeViews()
         loadSettings()
@@ -35,44 +32,27 @@ class SettingsActivity : AppCompatActivity() {
 
     private fun initializeViews() {
         speechRateSeekBar = findViewById(R.id.speechRateSeekBar)
-        speechPitchSeekBar = findViewById(R.id.speechPitchSeekBar)
-        voiceSpinner = findViewById(R.id.voiceSpinner)
         testButton = findViewById(R.id.testButton)
         backButton = findViewById(R.id.backButton)
+        voiceInfoText = findViewById(R.id.voiceInfoText)
 
-        // Setup seekbars
         speechRateSeekBar.max = 200
-        speechPitchSeekBar.max = 200
+        
+        voiceInfoText.text = getString(R.string.voice_info, "Alba (British English)")
     }
 
     private fun loadSettings() {
         val savedRate = preferences.getInt("speech_rate", 100)
-        val savedPitch = preferences.getInt("speech_pitch", 100)
-
         speechRateSeekBar.progress = savedRate
-        speechPitchSeekBar.progress = savedPitch
 
         val rateTv = findViewById<TextView>(R.id.rateValue)
-        val pitchTv = findViewById<TextView>(R.id.pitchValue)
-
         rateTv.text = getString(R.string.percent_int, savedRate)
-        pitchTv.text = getString(R.string.percent_int, savedPitch)
-
     }
 
     private fun setupListeners() {
         speechRateSeekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
                 findViewById<TextView>(R.id.rateValue).text = getString(R.string.percent_int, progress)
-                if (fromUser) saveSettings()
-            }
-            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
-            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
-        })
-
-        speechPitchSeekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                findViewById<TextView>(R.id.pitchValue).text = getString(R.string.percent_int, progress)
                 if (fromUser) saveSettings()
             }
             override fun onStartTrackingTouch(seekBar: SeekBar?) {}
@@ -91,87 +71,73 @@ class SettingsActivity : AppCompatActivity() {
     private fun saveSettings() {
         preferences.edit().apply {
             putInt("speech_rate", speechRateSeekBar.progress)
-            putInt("speech_pitch", speechPitchSeekBar.progress)
             apply()
         }
     }
 
     private fun initializeTestTTS() {
-        testTTS = TextToSpeech(this) { status ->
-            if (status == TextToSpeech.SUCCESS) {
-                testButton.isEnabled = true
-                setupVoiceSpinner()
+        testButton.isEnabled = false
+        testButton.text = getString(R.string.loading_tts)
+        
+        testTTS = SherpaOnnxTts(this)
+        testTTS?.setCallback(object : SherpaOnnxTts.TtsCallback {
+            override fun onInitialized(success: Boolean) {
+                runOnUiThread {
+                    ttsReady = success
+                    testButton.isEnabled = success
+                    testButton.text = getString(R.string.test_voice_settings)
+                    if (!success) {
+                        Toast.makeText(this@SettingsActivity, 
+                            getString(R.string.tts_init_failed), Toast.LENGTH_LONG).show()
+                    }
+                }
             }
+
+            override fun onSpeakStart(utteranceId: String) {
+                runOnUiThread {
+                    testButton.isEnabled = false
+                    testButton.text = getString(R.string.playing)
+                }
+            }
+
+            override fun onSpeakDone(utteranceId: String) {
+                runOnUiThread {
+                    testButton.isEnabled = true
+                    testButton.text = getString(R.string.test_voice_settings)
+                }
+            }
+
+            override fun onSpeakError(utteranceId: String, error: String) {
+                runOnUiThread {
+                    testButton.isEnabled = true
+                    testButton.text = getString(R.string.test_voice_settings)
+                    Toast.makeText(this@SettingsActivity, 
+                        getString(R.string.tts_error, error), Toast.LENGTH_SHORT).show()
+                }
+            }
+        })
+        
+        testTTS?.initialize { success ->
+            // Handled in callback
         }
     }
 
     private fun testVoiceSettings() {
-        testTTS?.let { tts ->
-            val rate = speechRateSeekBar.progress / 100f
-            val pitch = speechPitchSeekBar.progress / 100f
-
-            tts.setSpeechRate(rate)
-            tts.setPitch(pitch)
-
-            tts.speak(
-                "This is a test of your PasteIt voice settings. How does this sound?",
-                TextToSpeech.QUEUE_FLUSH,
-                null,
-                "test"
-            )
+        if (!ttsReady) {
+            Toast.makeText(this, getString(R.string.tts_not_ready), Toast.LENGTH_SHORT).show()
+            return
         }
-    }
-
-    private fun setupVoiceSpinner() {
-        testTTS?.let { tts ->
-            availableVoices.clear()
-            val voices = tts.voices
-            if (voices != null) {
-                availableVoices.addAll(voices.filter { it.locale.language == java.util.Locale.getDefault().language })
-            }
-
-            val voiceNames = availableVoices.map { voice ->
-                "${voice.name} (${voice.locale.displayCountry})"
-            }.toMutableList()
-
-            if (voiceNames.isEmpty()) {
-                voiceNames.add("Default Voice")
-            }
-
-            voiceAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, voiceNames)
-            voiceAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-            voiceSpinner.adapter = voiceAdapter
-
-            // Load saved voice preference
-            val savedVoiceName = preferences.getString("selected_voice", "")
-            val savedIndex = availableVoices.indexOfFirst { it.name == savedVoiceName }
-            if (savedIndex >= 0) {
-                voiceSpinner.setSelection(savedIndex)
-            }
-
-            voiceSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-                override fun onItemSelected(
-                    parent: AdapterView<*>?,
-                    view: android.view.View?,
-                    position: Int,
-                    id: Long
-                ) {
-                    if (position < availableVoices.size) {
-                        val selectedVoice = availableVoices[position]
-                        preferences.edit {
-                            putString("selected_voice", selectedVoice.name)
-                        }
-                        tts.voice = selectedVoice
-                    }
-                }
-
-                override fun onNothingSelected(parent: AdapterView<*>?) {}
-            }
-        }
+        
+        val rate = speechRateSeekBar.progress / 100f
+        testTTS?.setSpeechRate(rate)
+        testTTS?.speak(
+            "This is a test of your PasteIt voice settings. How does this sound?",
+            "test"
+        )
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        testTTS?.shutdown()
+        testTTS?.release()
     }
 }
