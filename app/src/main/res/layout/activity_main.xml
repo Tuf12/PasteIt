@@ -98,15 +98,33 @@
 
     <!-- Status Text (when collapsed) -->
 
-    <Button
-        android:id="@+id/expandButton"
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
-        android:background="?attr/selectableItemBackground"
-        android:text="@string/show_text"
-        android:textColor="#666666"
-        android:textSize="14sp" />
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <ImageButton
+            android:id="@+id/stockFormatButton"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_marginEnd="4dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/stock_format_button_cd_off"
+            android:padding="8dp"
+            app:srcCompat="@drawable/ic_trending_up_24" />
+
+        <Button
+            android:id="@+id/expandButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:background="?attr/selectableItemBackground"
+            android:text="@string/show_text"
+            android:textColor="#666666"
+            android:textSize="14sp" />
+    </LinearLayout>
 
     <TextView
         android:layout_width="match_parent"

@@ -24,9 +24,36 @@
     <string name="nothing_on_clipboard">nothing_on_clipboard</string>
     <string name="voice_info">Current voice: %1$s</string>
     <string name="voice_info_default">Alba (British English) - Sherpa ONNX</string>
+    <string name="voice_reading_voice">Reading voice</string>
+    <string name="voice_name_alba">Alba (UK — expressive)</string>
+    <string name="voice_hint_alba">British English, warm and natural. Great for long reads; US tickers sound UK-accented.</string>
+    <string name="voice_name_us_lessac">Lessac (US — very clear)</string>
+    <string name="voice_hint_us_lessac">American English with crisp consonants. Best for stock symbols, percentages, and dense financial text.</string>
+    <string name="voice_name_us_ryan">Ryan (US — confident)</string>
+    <string name="voice_hint_us_ryan">American English, clear and forward. Good energy for market-style lists without sounding monotone.</string>
     <string name="loading_tts">Loading TTS…</string>
     <string name="playing">Playing…</string>
     <string name="tts_init_failed">Failed to initialize TTS engine</string>
     <string name="tts_error">TTS Error: %1$s</string>
     <string name="tts_not_ready">TTS engine is not ready yet</string>
+    <string name="voice_tuning">Voice tuning (Sherpa / VITS)</string>
+    <string name="voice_smoothness">Smoothness (lower = less choppy)</string>
+    <string name="voice_prosody_variation">Prosody variation</string>
+    <string name="voice_speaking_length">Speaking length scale</string>
+    <string name="voice_pause_between_sentences">Pause between sentences</string>
+    <string name="voice_chunk_size">Chunk size (characters)</string>
+    <string name="voice_tuning_hint">Smoothness and variation map to VITS noise controls. Changing voice options (including pauses) reloads the engine briefly. Chunk size only affects how text is split.</string>
+    <string name="float_2">%1$.2f</string>
+    <string name="int_value">%1$d</string>
+    <string name="reloading_voice">Reloading voice engine…</string>
+    <string name="reset_to_original_defaults">Reset to original defaults</string>
+    <string name="defaults_restored">Defaults restored</string>
+    <string name="test_voice_phrase_stocks">This is a voice check. Apple gained two point four percent. S M C I closed near fifty dollars after holding 353sh overnight.</string>
+    <string name="speech_format_title">TTS text formatting</string>
+    <string name="speech_format_auto">Automatic (detect finance-style text)</string>
+    <string name="speech_format_off">Off (plain read)</string>
+    <string name="speech_format_stock">Finance / markets (always)</string>
+    <string name="speech_format_hint">Automatic mode only changes what is spoken, not the text on screen. The main-screen chart button forces finance-style reading until you tap it again to turn off.</string>
+    <string name="stock_format_button_cd_off">Finance read mode off. Tap to expand tickers and market shorthand for text to speech.</string>
+    <string name="stock_format_button_cd_on">Finance read mode on. Tap to turn off.</string>
 </resources>

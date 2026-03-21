@@ -82,6 +82,175 @@
 
         </LinearLayout>
 
+        <!-- TTS text formatting -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="24dp"
+            android:background="#ffffff"
+            android:elevation="2dp"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"
+                android:text="@string/speech_format_title"
+                android:textColor="#666666"
+                android:textSize="18sp"
+                android:textStyle="bold" />
+
+            <Spinner
+                android:id="@+id/speechFormatSpinner"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/speech_format_hint"
+                android:textColor="#888888"
+                android:textSize="13sp" />
+        </LinearLayout>
+
+        <!-- Voice tuning -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:layout_marginBottom="24dp"
+            android:background="#ffffff"
+            android:padding="16dp"
+            android:elevation="2dp">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/voice_tuning"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="8dp"
+                android:textColor="#666666" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/voice_tuning_hint"
+                android:textSize="13sp"
+                android:textColor="#888888"
+                android:layout_marginBottom="12dp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/voice_smoothness"
+                android:textSize="14sp"
+                android:textColor="#666666" />
+            <SeekBar
+                android:id="@+id/noiseScaleSeekBar"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="4dp" />
+            <TextView
+                android:id="@+id/noiseScaleValue"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textAlignment="center"
+                android:textSize="13sp"
+                android:textColor="#888888"
+                android:layout_marginBottom="12dp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/voice_prosody_variation"
+                android:textSize="14sp"
+                android:textColor="#666666" />
+            <SeekBar
+                android:id="@+id/noiseScaleWSeekBar"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="4dp" />
+            <TextView
+                android:id="@+id/noiseScaleWValue"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textAlignment="center"
+                android:textSize="13sp"
+                android:textColor="#888888"
+                android:layout_marginBottom="12dp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/voice_speaking_length"
+                android:textSize="14sp"
+                android:textColor="#666666" />
+            <SeekBar
+                android:id="@+id/lengthScaleSeekBar"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="4dp" />
+            <TextView
+                android:id="@+id/lengthScaleValue"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textAlignment="center"
+                android:textSize="13sp"
+                android:textColor="#888888"
+                android:layout_marginBottom="12dp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/voice_pause_between_sentences"
+                android:textSize="14sp"
+                android:textColor="#666666" />
+            <SeekBar
+                android:id="@+id/silenceScaleSeekBar"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="4dp" />
+            <TextView
+                android:id="@+id/silenceScaleValue"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textAlignment="center"
+                android:textSize="13sp"
+                android:textColor="#888888"
+                android:layout_marginBottom="12dp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/voice_chunk_size"
+                android:textSize="14sp"
+                android:textColor="#666666" />
+            <SeekBar
+                android:id="@+id/chunkMaxSeekBar"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="4dp" />
+            <TextView
+                android:id="@+id/chunkMaxValue"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textAlignment="center"
+                android:textSize="13sp"
+                android:textColor="#888888" />
+
+            <Button
+                android:id="@+id/resetVoiceDefaultsButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:text="@string/reset_to_original_defaults"
+                android:textSize="14sp" />
+
+        </LinearLayout>
+
         <!-- Voice Info -->
         <LinearLayout
             android:layout_width="match_parent"
@@ -95,17 +264,23 @@
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="@string/voice"
+                android:text="@string/voice_reading_voice"
                 android:textSize="18sp"
                 android:textStyle="bold"
                 android:layout_marginBottom="8dp"
                 android:textColor="#666666" />
 
+            <Spinner
+                android:id="@+id/voiceSpinner"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp" />
+
             <TextView
                 android:id="@+id/voiceInfoText"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="@string/voice_info_default"
+                android:text="@string/voice_hint_alba"
                 android:textSize="14sp"
                 android:textColor="#888888" />
 

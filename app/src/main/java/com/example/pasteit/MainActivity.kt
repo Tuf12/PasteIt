@@ -29,6 +29,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var settingsButton: ImageButton
     private lateinit var textDisplay: TextView
     private lateinit var expandButton: Button
+    private lateinit var stockFormatButton: ImageButton
     private lateinit var textContainer: ScrollView
     private lateinit var pasteButton: ImageButton
     private var clipboardService: ClipboardMonitorService? = null
@@ -45,6 +46,8 @@ class MainActivity : AppCompatActivity() {
 
             // Apply TTS settings from preferences
             applyTTSSettings()
+            clipboardService?.reapplySpeechFormatting()
+            updateStockFormatButtonUi()
 
             // Set up clipboard listener
             clipboardService?.setClipboardListener { clipText ->
@@ -121,8 +124,14 @@ class MainActivity : AppCompatActivity() {
 
 
     private fun applyTTSSettings() {
-        val rate = preferences.getInt("speech_rate", 100) / 100f
-        val pitch = preferences.getInt("speech_pitch", 100) / 100f
+        val rate = preferences.getInt(
+            SherpaTtsEngineParams.PREF_SPEECH_RATE,
+            SherpaTtsEngineParams.DEFAULT_SPEECH_RATE_PERCENT,
+        ) / 100f
+        val pitch = preferences.getInt(
+            SherpaTtsEngineParams.PREF_SPEECH_PITCH,
+            SherpaTtsEngineParams.DEFAULT_SPEECH_PITCH_PERCENT,
+        ) / 100f
 
         clipboardService?.updateTTSSettings(rate, pitch)
     }
@@ -135,10 +144,12 @@ class MainActivity : AppCompatActivity() {
         textDisplay = findViewById(R.id.textDisplay)
         textDisplay.movementMethod = LinkMovementMethod.getInstance()
         expandButton = findViewById(R.id.expandButton)
+        stockFormatButton = findViewById(R.id.stockFormatButton)
         textContainer = findViewById(R.id.textContainer)
         pasteButton = findViewById(R.id.pasteButton)
 
         updateLayoutForPipMode(false)
+        updateStockFormatButtonUi()
     }
 
     private fun setupClickListeners() {
@@ -162,6 +173,13 @@ class MainActivity : AppCompatActivity() {
 
         expandButton.setOnClickListener {
             toggleTextExpansion()
+        }
+
+        stockFormatButton.setOnClickListener {
+            val next = !preferences.getBoolean(SpeechFormattingPreferences.PREF_QUICK_STOCK, false)
+            preferences.edit().putBoolean(SpeechFormattingPreferences.PREF_QUICK_STOCK, next).apply()
+            updateStockFormatButtonUi()
+            clipboardService?.reapplySpeechFormatting()
         }
 
         pasteButton.setOnClickListener {
@@ -239,10 +257,20 @@ class MainActivity : AppCompatActivity() {
         updateLayoutForPipMode(isInPictureInPictureMode)
     }
 
+    private fun updateStockFormatButtonUi() {
+        val on = preferences.getBoolean(SpeechFormattingPreferences.PREF_QUICK_STOCK, false)
+        stockFormatButton.isSelected = on
+        stockFormatButton.alpha = if (on) 1f else 0.45f
+        stockFormatButton.contentDescription = getString(
+            if (on) R.string.stock_format_button_cd_on else R.string.stock_format_button_cd_off,
+        )
+    }
+
     private fun updateLayoutForPipMode(isPipMode: Boolean) {
         if (isPipMode) {
             // Hide unnecessary elements in PiP mode
             settingsButton.visibility = View.GONE
+            stockFormatButton.visibility = View.GONE
             if (isTextExpanded) {
                 toggleTextExpansion()
             }
@@ -250,6 +278,7 @@ class MainActivity : AppCompatActivity() {
         } else {
             // Show all elements in normal mode
             settingsButton.visibility = View.VISIBLE
+            stockFormatButton.visibility = View.VISIBLE
             expandButton.text = if (isTextExpanded) "▲ Minimize" else "▼ Show Text"
         }
     }
