@@ -1,139 +1,560 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#f0f0f0"
-    android:orientation="vertical"
-    android:padding="16dp"
-    android:paddingTop="?attr/actionBarSize">
+    android:background="@color/pasteit_bg"
+    android:fitsSystemWindows="true">
 
-    <!-- Control Buttons Row -->
-
-    <!-- Expand/Collapse Button -->
+    <!-- ── MAIN APP UI ─────────────────────────────────────────────── -->
     <LinearLayout
+        android:id="@+id/mainContent"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:background="#333333"
-        android:elevation="4dp"
-        android:gravity="center"
-        android:orientation="horizontal"
-        android:layout_marginTop="30dp"
-        android:padding="4dp">
+        android:layout_height="match_parent"
+        android:orientation="vertical">
 
-        <ImageButton
-            android:id="@+id/rewindButton"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:layout_margin="4dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="@string/rewind"
-            android:enabled="false"
-            android:src="@android:drawable/ic_media_rew" />
+        <!-- Content wrapper with horizontal padding -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:paddingStart="16dp"
+            android:paddingTop="20dp"
+            android:paddingEnd="16dp"
+            android:paddingBottom="8dp">
 
-        <ImageButton
-            android:id="@+id/playButton"
-            android:layout_width="64dp"
-            android:layout_height="64dp"
-            android:layout_margin="4dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="@string/play_pause"
-            android:enabled="false"
-            android:src="@android:drawable/ic_media_play" />
+            <!-- Header row: wordmark + theme toggle + settings -->
+            <LinearLayout
+                android:id="@+id/headerRow"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
 
-        <ImageButton
-            android:id="@+id/pasteButton"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:layout_margin="4dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="@string/paste_from_clipboard"
-            app:srcCompat="@drawable/baseline_content_paste_24"
-            app:tint="#ffffff" />
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
 
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="sans-serif-black"
+                        android:letterSpacing="-0.02"
+                        android:text="@string/paste_wordmark"
+                        android:textColor="@color/pasteit_text"
+                        android:textSize="28sp" />
 
-        <ImageButton
-            android:id="@+id/fastForwardButton"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:layout_margin="4dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="@string/fast_forward"
-            android:enabled="false"
-            android:src="@android:drawable/ic_media_ff" />
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="sans-serif-black"
+                        android:letterSpacing="-0.02"
+                        android:text="@string/it_wordmark"
+                        android:textColor="@color/pasteit_accent"
+                        android:textSize="28sp" />
+                </LinearLayout>
 
-        <ImageButton
-            android:id="@+id/settingsButton"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:layout_margin="4dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="@string/settings"
-            android:src="@android:drawable/ic_menu_preferences" />
+                <ImageButton
+                    android:id="@+id/themeToggleButton"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:layout_marginEnd="8dp"
+                    android:background="@drawable/bg_control_surface"
+                    android:contentDescription="@string/theme_toggle_cd"
+                    android:padding="10dp"
+                    app:srcCompat="@drawable/ic_moon"
+                    app:tint="@color/pasteit_text_dim" />
+
+                <ImageButton
+                    android:id="@+id/settingsButton"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:background="@drawable/bg_control_surface"
+                    android:contentDescription="@string/settings"
+                    android:padding="10dp"
+                    app:srcCompat="@drawable/ic_nav_settings"
+                    app:tint="@color/pasteit_text_dim" />
+            </LinearLayout>
+
+            <!-- Now Playing Card -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/nowPlayingCard"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="18dp"
+                app:cardBackgroundColor="@color/pasteit_surface"
+                app:cardCornerRadius="24dp"
+                app:cardElevation="0dp"
+                app:strokeColor="@color/pasteit_border"
+                app:strokeWidth="1dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="20dp">
+
+                    <!-- Status row: dot + label + stock format toggle + engine badge -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <View
+                            android:id="@+id/statusDot"
+                            android:layout_width="8dp"
+                            android:layout_height="8dp"
+                            android:background="@drawable/bg_status_dot" />
+
+                        <TextView
+                            android:id="@+id/nowReadingLabel"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="8dp"
+                            android:layout_weight="1"
+                            android:fontFamily="monospace"
+                            android:letterSpacing="0.18"
+                            android:text="@string/now_reading"
+                            android:textAllCaps="true"
+                            android:textColor="@color/pasteit_accent"
+                            android:textSize="11sp" />
+
+                        <ImageButton
+                            android:id="@+id/stockFormatButton"
+                            android:layout_width="32dp"
+                            android:layout_height="32dp"
+                            android:layout_marginEnd="8dp"
+                            android:background="@android:color/transparent"
+                            android:contentDescription="@string/stock_format_button_cd_off"
+                            android:padding="4dp"
+                            app:srcCompat="@drawable/ic_trending_up_24"
+                            app:tint="@color/pasteit_text_dim" />
+
+                        <TextView
+                            android:id="@+id/engineBadgeText"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:background="@drawable/bg_chip_surface"
+                            android:fontFamily="monospace"
+                            android:paddingStart="10dp"
+                            android:paddingTop="5dp"
+                            android:paddingEnd="10dp"
+                            android:paddingBottom="5dp"
+                            android:textColor="@color/pasteit_text_dim"
+                            android:textSize="11sp" />
+                    </LinearLayout>
+
+                    <!-- Title: first 2 lines of loaded text -->
+                    <TextView
+                        android:id="@+id/nowPlayingTitle"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="14dp"
+                        android:ellipsize="end"
+                        android:maxLines="2"
+                        android:text="@string/player_idle_title"
+                        android:textColor="@color/pasteit_text"
+                        android:textSize="16sp"
+                        android:textStyle="bold" />
+
+                    <!-- Chunk seek bar -->
+                    <SeekBar
+                        android:id="@+id/chunkProgressBar"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp"
+                        android:max="100"
+                        android:progress="0"
+                        android:progressBackgroundTint="@color/pasteit_progress_track"
+                        android:progressTint="@color/pasteit_accent"
+                        android:thumbTint="@color/pasteit_accent" />
+
+                    <!-- Chunk meta row -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <TextView
+                            android:id="@+id/chunkMetaText"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:fontFamily="monospace"
+                            android:textColor="@color/pasteit_text_dim"
+                            android:textSize="11sp" />
+
+                        <!-- MAX mode toggle — amber when active -->
+                        <TextView
+                            android:id="@+id/maxChunkButton"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginEnd="8dp"
+                            android:background="@drawable/bg_chip_surface"
+                            android:contentDescription="@string/max_chunk_cd"
+                            android:fontFamily="monospace"
+                            android:paddingStart="8dp"
+                            android:paddingTop="4dp"
+                            android:paddingEnd="8dp"
+                            android:paddingBottom="4dp"
+                            android:text="@string/max_chunk_label"
+                            android:textColor="@color/pasteit_text_dim"
+                            android:textSize="11sp" />
+
+                        <TextView
+                            android:id="@+id/sourceMetaText"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:fontFamily="monospace"
+                            android:textColor="@color/pasteit_text_dim"
+                            android:textSize="11sp" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/timeEstimateText"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:fontFamily="monospace"
+                        android:textColor="@color/pasteit_text_dim"
+                        android:textSize="11sp" />
+
+                    <!-- Start Over — visible only when past chunk 0 -->
+                    <TextView
+                        android:id="@+id/startOverButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp"
+                        android:layout_gravity="center_horizontal"
+                        android:background="?android:attr/selectableItemBackground"
+                        android:contentDescription="@string/start_over_cd"
+                        android:fontFamily="monospace"
+                        android:letterSpacing="0.06"
+                        android:padding="6dp"
+                        android:text="@string/start_over"
+                        android:textColor="@color/pasteit_text_dim"
+                        android:textSize="11sp"
+                        android:visibility="gone" />
+
+                    <!-- Controls: ⏮ paste ▶/⏸ ⏭ bookmark -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="14dp"
+                        android:gravity="center"
+                        android:orientation="horizontal">
+
+                        <ImageButton
+                            android:id="@+id/rewindButton"
+                            android:layout_width="48dp"
+                            android:layout_height="48dp"
+                            android:layout_marginEnd="10dp"
+                            android:background="@drawable/bg_control_surface"
+                            android:contentDescription="@string/rewind"
+                            android:enabled="false"
+                            android:padding="12dp"
+                            android:src="@android:drawable/ic_media_rew"
+                            app:tint="@color/pasteit_text_dim" />
+
+                        <ImageButton
+                            android:id="@+id/pasteButton"
+                            android:layout_width="48dp"
+                            android:layout_height="48dp"
+                            android:layout_marginEnd="10dp"
+                            android:background="@drawable/bg_control_paste"
+                            android:contentDescription="@string/paste_from_clipboard"
+                            android:padding="12dp"
+                            app:srcCompat="@drawable/baseline_content_paste_24"
+                            app:tint="@color/pasteit_accent" />
+
+                        <ImageButton
+                            android:id="@+id/playButton"
+                            android:layout_width="64dp"
+                            android:layout_height="64dp"
+                            android:layout_marginEnd="10dp"
+                            android:background="@drawable/bg_control_play"
+                            android:contentDescription="@string/play_pause"
+                            android:enabled="false"
+                            android:padding="16dp"
+                            android:src="@android:drawable/ic_media_play"
+                            app:tint="@color/pasteit_icon_on_accent" />
+
+                        <ImageButton
+                            android:id="@+id/fastForwardButton"
+                            android:layout_width="48dp"
+                            android:layout_height="48dp"
+                            android:layout_marginEnd="10dp"
+                            android:background="@drawable/bg_control_surface"
+                            android:contentDescription="@string/fast_forward"
+                            android:enabled="false"
+                            android:padding="12dp"
+                            android:src="@android:drawable/ic_media_ff"
+                            app:tint="@color/pasteit_text_dim" />
+
+                        <ImageButton
+                            android:id="@+id/bookmarkButton"
+                            android:layout_width="48dp"
+                            android:layout_height="48dp"
+                            android:background="@drawable/bg_control_surface"
+                            android:contentDescription="@string/save"
+                            android:enabled="false"
+                            android:padding="12dp"
+                            app:srcCompat="@drawable/ic_bookmark_border"
+                            app:tint="@color/pasteit_text_dim" />
+                    </LinearLayout>
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Text Panel Card -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/textPanelCard"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_marginTop="14dp"
+                android:layout_weight="1"
+                app:cardBackgroundColor="@color/pasteit_surface"
+                app:cardCornerRadius="24dp"
+                app:cardElevation="0dp"
+                app:strokeColor="@color/pasteit_border"
+                app:strokeWidth="1dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:orientation="vertical"
+                    android:padding="18dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:fontFamily="monospace"
+                            android:letterSpacing="0.16"
+                            android:text="@string/text_view"
+                            android:textAllCaps="true"
+                            android:textColor="@color/pasteit_text_dim"
+                            android:textSize="11sp" />
+
+                        <TextView
+                            android:id="@+id/documentMetaText"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:background="@drawable/bg_chip_surface"
+                            android:fontFamily="monospace"
+                            android:paddingStart="10dp"
+                            android:paddingTop="5dp"
+                            android:paddingEnd="10dp"
+                            android:paddingBottom="5dp"
+                            android:textColor="@color/pasteit_text_dim"
+                            android:textSize="11sp" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <ProgressBar
+                            android:id="@+id/ttsProgressBar"
+                            style="?android:attr/progressBarStyleSmall"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:indeterminateTint="@color/pasteit_accent"
+                            android:visibility="gone" />
+
+                        <TextView
+                            android:id="@+id/playbackStatusText"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="8dp"
+                            android:layout_weight="1"
+                            android:textColor="@color/pasteit_text_dim"
+                            android:textSize="13sp"
+                            android:visibility="gone" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/cacheStatusText"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:textColor="@color/pasteit_text_dim"
+                        android:textSize="12sp"
+                        android:visibility="gone" />
+
+                    <ScrollView
+                        android:id="@+id/textContainer"
+                        android:layout_width="match_parent"
+                        android:layout_height="0dp"
+                        android:layout_marginTop="12dp"
+                        android:layout_weight="1"
+                        android:fillViewport="true">
+
+                        <TextView
+                            android:id="@+id/textDisplay"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:fontFamily="monospace"
+                            android:lineSpacingExtra="6dp"
+                            android:paddingBottom="8dp"
+                            android:text="@string/copy_some_text_to_get_started"
+                            android:textColor="@color/pasteit_text"
+                            android:textSize="14sp" />
+                    </ScrollView>
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+        </LinearLayout>
+
+        <!-- Bottom navigation bar (full width) -->
+        <include layout="@layout/nav_bottom" />
 
     </LinearLayout>
 
-    <!-- Expandable Text Container -->
-    <ScrollView
-        android:id="@+id/textContainer"
+    <!-- ── PIP OVERLAY — hidden normally, shown in PiP mode ────────── -->
+    <FrameLayout
+        android:id="@+id/pipOverlay"
         android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_marginTop="8dp"
-        android:layout_weight="1"
-        android:background="#ffffff"
-        android:elevation="2dp"
+        android:layout_height="match_parent"
+        android:background="@color/pasteit_surface"
         android:visibility="gone">
 
-        <TextView
-            android:id="@+id/textDisplay"
+        <!-- Subtle amber top-edge gradient line -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_gravity="top"
+            android:alpha="0.35"
+            android:background="@color/pasteit_accent" />
+
+        <!-- Ambient waveform at the bottom -->
+        <ImageView
+            android:layout_width="match_parent"
+            android:layout_height="80dp"
+            android:layout_gravity="bottom"
+            android:alpha="0.07"
+            android:scaleType="fitXY"
+            android:src="@drawable/bg_pip_waveform" />
+
+        <!-- Main content -->
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:lineSpacingExtra="4dp"
-            android:padding="16dp"
-            android:text="@string/copy_some_text_to_get_started"
-            android:textColor="#333333"
-            android:textSize="16sp" />
+            android:layout_gravity="center_vertical"
+            android:orientation="vertical"
+            android:padding="14dp">
 
-    </ScrollView>
+            <!-- Header: wordmark + live/paused/loading status -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
 
-    <!-- Status Text (when collapsed) -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="sans-serif-black"
+                    android:text="@string/paste_wordmark"
+                    android:textColor="@color/pasteit_text_dim"
+                    android:textSize="13sp" />
 
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:gravity="center_vertical"
-        android:orientation="horizontal">
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="sans-serif-black"
+                    android:text="@string/it_wordmark"
+                    android:textColor="@color/pasteit_accent"
+                    android:textSize="13sp" />
 
-        <ImageButton
-            android:id="@+id/stockFormatButton"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:layout_marginEnd="4dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="@string/stock_format_button_cd_off"
-            android:padding="8dp"
-            app:srcCompat="@drawable/ic_trending_up_24" />
+                <Space
+                    android:layout_width="0dp"
+                    android:layout_height="1dp"
+                    android:layout_weight="1" />
 
-        <Button
-            android:id="@+id/expandButton"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:background="?attr/selectableItemBackground"
-            android:text="@string/show_text"
-            android:textColor="#666666"
-            android:textSize="14sp" />
-    </LinearLayout>
+                <!-- Status dot -->
+                <View
+                    android:id="@+id/pipStatusDot"
+                    android:layout_width="5dp"
+                    android:layout_height="5dp"
+                    android:layout_marginEnd="5dp"
+                    android:background="@drawable/bg_status_dot" />
 
-    <TextView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
-        android:lineSpacingExtra="2dp"
-        android:text="@string/pasteit_is_ready_copy_any_text_and_it_will_appear_here_for_reading_press_and_hold_the_play_button_to_enter_picture_in_picture_mode"
-        android:textAlignment="center"
-        android:textColor="#666666"
-        android:textSize="14sp" />
+                <!-- Status label -->
+                <TextView
+                    android:id="@+id/pipStatusLabel"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="monospace"
+                    android:letterSpacing="0.1"
+                    android:text="@string/player_status_waiting"
+                    android:textAllCaps="true"
+                    android:textColor="@color/pasteit_text_dim"
+                    android:textSize="9sp" />
 
-</LinearLayout>
+            </LinearLayout>
+
+            <!-- Now reading title text, 2 lines max -->
+            <TextView
+                android:id="@+id/pipTitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:ellipsize="end"
+                android:maxLines="2"
+                android:text="@string/player_idle_title"
+                android:textColor="@color/pasteit_text"
+                android:textSize="12sp"
+                android:textStyle="bold" />
+
+            <!-- Progress + chunk counter -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <ProgressBar
+                    android:id="@+id/pipChunkProgressBar"
+                    style="?android:attr/progressBarStyleHorizontal"
+                    android:layout_width="0dp"
+                    android:layout_height="2dp"
+                    android:layout_weight="1"
+                    android:indeterminate="false"
+                    android:max="100"
+                    android:progress="0"
+                    android:progressBackgroundTint="@color/pasteit_border"
+                    android:progressTint="@color/pasteit_accent" />
+
+                <TextView
+                    android:id="@+id/pipChunkText"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:fontFamily="monospace"
+                    android:textColor="@color/pasteit_text_dim"
+                    android:textSize="9sp" />
+
+            </LinearLayout>
+
+        </LinearLayout>
+
+    </FrameLayout>
+
+</FrameLayout>

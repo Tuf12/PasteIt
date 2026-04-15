@@ -7,4 +7,25 @@
     <color name="teal_700">#FF018786</color>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+
+    <color name="pasteit_bg">#F5F3EF</color>
+    <color name="pasteit_shell">#E8E4DF</color>
+    <color name="pasteit_surface">#FFFFFFFF</color>
+    <color name="pasteit_surface_alt">#F0EDE8</color>
+    <color name="pasteit_border">#E2DDD7</color>
+    <color name="pasteit_border_strong">#CCC8C0</color>
+    <color name="pasteit_text">#1A1816</color>
+    <color name="pasteit_text_dim">#7A7470</color>
+    <color name="pasteit_text_soft">#A59D96</color>
+    <color name="pasteit_accent">#D4860A</color>
+    <color name="pasteit_accent_dim">#B36F08</color>
+    <color name="pasteit_accent_soft">#FEF3DE</color>
+    <color name="pasteit_accent_mid">#FDE4A8</color>
+    <color name="pasteit_success">#2E7D52</color>
+    <color name="pasteit_success_bg">#E8F5EE</color>
+    <color name="pasteit_red">#C0392B</color>
+    <color name="pasteit_red_bg">#FDECEA</color>
+    <color name="pasteit_progress_track">#E2DDD7</color>
+    <color name="pasteit_icon_on_accent">#FFFFFFFF</color>
+    <color name="pasteit_nav_bg">#FFFFFF</color>
 </resources>

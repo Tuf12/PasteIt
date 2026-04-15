@@ -1,319 +1,438 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:padding="16dp"
-    android:background="#f5f5f5">
+    android:background="@color/pasteit_bg"
+    android:fitsSystemWindows="true"
+    android:orientation="vertical">
 
-    <LinearLayout
+    <!-- Scrollable content -->
+    <ScrollView
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical">
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:paddingStart="16dp"
+        android:paddingTop="20dp"
+        android:paddingEnd="16dp"
+        android:paddingBottom="8dp">
 
-        <!-- Header -->
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/pasteit_settings"
-            android:textSize="24sp"
-            android:textStyle="bold"
-            android:layout_marginBottom="24dp"
-            android:textAlignment="center"
-            android:textColor="#666666"/>
-
-        <!-- Speech Rate Settings -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:layout_marginBottom="24dp"
-            android:background="#ffffff"
-            android:padding="16dp"
-            android:elevation="2dp"
-            android:textColor="#666666">
+            android:orientation="vertical">
 
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/speech_rate"
-                android:textSize="18sp"
-                android:textStyle="bold"
-                android:layout_marginBottom="8dp"
-                android:textColor="#666666"/>
-
+            <!-- Header: wordmark only (no subtitle, no back button) -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical">
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
 
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="@string/slow"
-                    android:textSize="12sp"
-                    android:textColor="#666666"/>
-
-                <SeekBar
-                    android:id="@+id/speechRateSeekBar"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:layout_margin="8dp" />
+                    android:fontFamily="sans-serif-black"
+                    android:text="@string/paste_wordmark"
+                    android:textColor="@color/pasteit_text"
+                    android:textSize="28sp" />
 
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="@string/fast"
-                    android:textSize="12sp"
-                    android:textColor="#666666" />
-
+                    android:fontFamily="sans-serif-black"
+                    android:text="@string/it_wordmark"
+                    android:textColor="@color/pasteit_accent"
+                    android:textSize="28sp" />
             </LinearLayout>
 
-            <TextView
-                android:id="@+id/rateValue"
+            <!-- TTS Provider card -->
+            <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="@string/_100"
-                android:textAlignment="center"
-                android:textSize="14sp"
-                android:textStyle="bold"
-                android:textColor="#666666"/>
+                android:layout_marginTop="18dp"
+                android:layout_marginBottom="16dp"
+                app:cardBackgroundColor="@color/pasteit_surface"
+                app:cardCornerRadius="24dp"
+                app:cardElevation="0dp"
+                app:strokeColor="@color/pasteit_border"
+                app:strokeWidth="1dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="18dp">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="8dp"
+                        android:fontFamily="monospace"
+                        android:letterSpacing="0.16"
+                        android:text="@string/settings_section_provider"
+                        android:textAllCaps="true"
+                        android:textColor="@color/pasteit_accent"
+                        android:textSize="11sp" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="12dp"
+                        android:text="@string/tts_provider_title"
+                        android:textColor="@color/pasteit_text"
+                        android:textSize="18sp"
+                        android:textStyle="bold" />
+
+                    <Spinner
+                        android:id="@+id/providerSpinner"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="8dp" />
+
+                    <TextView
+                        android:id="@+id/providerInfoText"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/tts_provider_hint_auto"
+                        android:textColor="@color/pasteit_text_dim"
+                        android:textSize="13sp" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- XAI Voice card -->
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="16dp"
+                app:cardBackgroundColor="@color/pasteit_surface"
+                app:cardCornerRadius="24dp"
+                app:cardElevation="0dp"
+                app:strokeColor="@color/pasteit_border"
+                app:strokeWidth="1dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="18dp">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="8dp"
+                        android:fontFamily="monospace"
+                        android:letterSpacing="0.16"
+                        android:text="@string/settings_section_xai"
+                        android:textAllCaps="true"
+                        android:textColor="@color/pasteit_accent"
+                        android:textSize="11sp" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="12dp"
+                        android:text="@string/xai_api_key_title"
+                        android:textColor="@color/pasteit_text"
+                        android:textSize="18sp"
+                        android:textStyle="bold" />
+
+                    <EditText
+                        android:id="@+id/xaiApiKeyEditText"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="6dp"
+                        android:hint="@string/xai_api_key_hint"
+                        android:inputType="textPassword"
+                        android:maxLines="1"
+                        android:textColor="@color/pasteit_text"
+                        android:textColorHint="@color/pasteit_text_dim" />
+
+                    <TextView
+                        android:id="@+id/xaiApiKeyLinkText"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="12dp"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:fontFamily="monospace"
+                        android:text="@string/get_xai_api_key"
+                        android:textColor="@color/pasteit_accent"
+                        android:textSize="12sp" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="6dp"
+                        android:text="@string/xai_voice_title"
+                        android:textColor="@color/pasteit_text_dim"
+                        android:textSize="14sp" />
+
+                    <Spinner
+                        android:id="@+id/xaiVoiceSpinner"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="8dp" />
+
+                    <TextView
+                        android:id="@+id/xaiVoiceInfoText"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="12dp"
+                        android:text="@string/xai_voice_hint_eve"
+                        android:textColor="@color/pasteit_text_dim"
+                        android:textSize="13sp" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/cloud_chunk_size"
+                        android:textColor="@color/pasteit_text_dim"
+                        android:textSize="14sp" />
+
+                    <SeekBar
+                        android:id="@+id/cloudChunkMaxSeekBar"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content" />
+
+                    <TextView
+                        android:id="@+id/cloudChunkMaxValue"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:textAlignment="center"
+                        android:textColor="@color/pasteit_text_dim"
+                        android:textSize="13sp" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Playback card -->
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="16dp"
+                app:cardBackgroundColor="@color/pasteit_surface"
+                app:cardCornerRadius="24dp"
+                app:cardElevation="0dp"
+                app:strokeColor="@color/pasteit_border"
+                app:strokeWidth="1dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="18dp">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="8dp"
+                        android:fontFamily="monospace"
+                        android:letterSpacing="0.16"
+                        android:text="@string/settings_section_playback"
+                        android:textAllCaps="true"
+                        android:textColor="@color/pasteit_accent"
+                        android:textSize="11sp" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="12dp"
+                        android:text="@string/playback_settings"
+                        android:textColor="@color/pasteit_text"
+                        android:textSize="18sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/speech_rate"
+                        android:textColor="@color/pasteit_text_dim"
+                        android:textSize="14sp" />
+
+                    <SeekBar
+                        android:id="@+id/speechRateSeekBar"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content" />
+
+                    <TextView
+                        android:id="@+id/rateValue"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="12dp"
+                        android:textAlignment="center"
+                        android:textColor="@color/pasteit_text_dim"
+                        android:textSize="13sp" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/speech_pitch"
+                        android:textColor="@color/pasteit_text_dim"
+                        android:textSize="14sp" />
+
+                    <SeekBar
+                        android:id="@+id/speechPitchSeekBar"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content" />
+
+                    <TextView
+                        android:id="@+id/pitchValue"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="12dp"
+                        android:textAlignment="center"
+                        android:textColor="@color/pasteit_text_dim"
+                        android:textSize="13sp" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/android_chunk_size"
+                        android:textColor="@color/pasteit_text_dim"
+                        android:textSize="14sp" />
+
+                    <SeekBar
+                        android:id="@+id/androidChunkMaxSeekBar"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content" />
+
+                    <TextView
+                        android:id="@+id/androidChunkMaxValue"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:textAlignment="center"
+                        android:textColor="@color/pasteit_text_dim"
+                        android:textSize="13sp" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Speech Formatting card -->
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="16dp"
+                app:cardBackgroundColor="@color/pasteit_surface"
+                app:cardCornerRadius="24dp"
+                app:cardElevation="0dp"
+                app:strokeColor="@color/pasteit_border"
+                app:strokeWidth="1dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="18dp">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="8dp"
+                        android:fontFamily="monospace"
+                        android:letterSpacing="0.16"
+                        android:text="@string/settings_section_formatting"
+                        android:textAllCaps="true"
+                        android:textColor="@color/pasteit_accent"
+                        android:textSize="11sp" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="12dp"
+                        android:text="@string/speech_format_title"
+                        android:textColor="@color/pasteit_text"
+                        android:textSize="18sp"
+                        android:textStyle="bold" />
+
+                    <Spinner
+                        android:id="@+id/speechFormatSpinner"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="8dp" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="16dp"
+                        android:text="@string/speech_format_hint"
+                        android:textColor="@color/pasteit_text_dim"
+                        android:textSize="13sp" />
+
+                    <!-- Skip code blocks toggle -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="@string/skip_code_blocks_title"
+                            android:textColor="@color/pasteit_text"
+                            android:textSize="14sp" />
+
+                        <Switch
+                            android:id="@+id/skipCodeBlocksSwitch"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:text="@string/skip_code_blocks_hint"
+                        android:textColor="@color/pasteit_text_dim"
+                        android:textSize="13sp" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Voice Check card -->
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="16dp"
+                app:cardBackgroundColor="@color/pasteit_surface"
+                app:cardCornerRadius="24dp"
+                app:cardElevation="0dp"
+                app:strokeColor="@color/pasteit_border"
+                app:strokeWidth="1dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="18dp">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="8dp"
+                        android:fontFamily="monospace"
+                        android:letterSpacing="0.16"
+                        android:text="@string/settings_section_test"
+                        android:textAllCaps="true"
+                        android:textColor="@color/pasteit_accent"
+                        android:textSize="11sp" />
+
+                    <Button
+                        android:id="@+id/testButton"
+                        android:layout_width="match_parent"
+                        android:layout_height="48dp"
+                        android:background="@drawable/bg_control_play"
+                        android:enabled="false"
+                        android:text="@string/test_voice_settings"
+                        android:textAllCaps="false"
+                        android:textColor="@color/pasteit_icon_on_accent"
+                        android:textStyle="bold" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
 
         </LinearLayout>
+    </ScrollView>
 
-        <!-- TTS text formatting -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="24dp"
-            android:background="#ffffff"
-            android:elevation="2dp"
-            android:orientation="vertical"
-            android:padding="16dp">
+    <!-- Bottom navigation bar -->
+    <include layout="@layout/nav_bottom" />
 
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="8dp"
-                android:text="@string/speech_format_title"
-                android:textColor="#666666"
-                android:textSize="18sp"
-                android:textStyle="bold" />
-
-            <Spinner
-                android:id="@+id/speechFormatSpinner"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="8dp" />
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/speech_format_hint"
-                android:textColor="#888888"
-                android:textSize="13sp" />
-        </LinearLayout>
-
-        <!-- Voice tuning -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:layout_marginBottom="24dp"
-            android:background="#ffffff"
-            android:padding="16dp"
-            android:elevation="2dp">
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/voice_tuning"
-                android:textSize="18sp"
-                android:textStyle="bold"
-                android:layout_marginBottom="8dp"
-                android:textColor="#666666" />
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/voice_tuning_hint"
-                android:textSize="13sp"
-                android:textColor="#888888"
-                android:layout_marginBottom="12dp" />
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/voice_smoothness"
-                android:textSize="14sp"
-                android:textColor="#666666" />
-            <SeekBar
-                android:id="@+id/noiseScaleSeekBar"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="4dp" />
-            <TextView
-                android:id="@+id/noiseScaleValue"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:textAlignment="center"
-                android:textSize="13sp"
-                android:textColor="#888888"
-                android:layout_marginBottom="12dp" />
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/voice_prosody_variation"
-                android:textSize="14sp"
-                android:textColor="#666666" />
-            <SeekBar
-                android:id="@+id/noiseScaleWSeekBar"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="4dp" />
-            <TextView
-                android:id="@+id/noiseScaleWValue"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:textAlignment="center"
-                android:textSize="13sp"
-                android:textColor="#888888"
-                android:layout_marginBottom="12dp" />
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/voice_speaking_length"
-                android:textSize="14sp"
-                android:textColor="#666666" />
-            <SeekBar
-                android:id="@+id/lengthScaleSeekBar"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="4dp" />
-            <TextView
-                android:id="@+id/lengthScaleValue"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:textAlignment="center"
-                android:textSize="13sp"
-                android:textColor="#888888"
-                android:layout_marginBottom="12dp" />
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/voice_pause_between_sentences"
-                android:textSize="14sp"
-                android:textColor="#666666" />
-            <SeekBar
-                android:id="@+id/silenceScaleSeekBar"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="4dp" />
-            <TextView
-                android:id="@+id/silenceScaleValue"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:textAlignment="center"
-                android:textSize="13sp"
-                android:textColor="#888888"
-                android:layout_marginBottom="12dp" />
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/voice_chunk_size"
-                android:textSize="14sp"
-                android:textColor="#666666" />
-            <SeekBar
-                android:id="@+id/chunkMaxSeekBar"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="4dp" />
-            <TextView
-                android:id="@+id/chunkMaxValue"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:textAlignment="center"
-                android:textSize="13sp"
-                android:textColor="#888888" />
-
-            <Button
-                android:id="@+id/resetVoiceDefaultsButton"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
-                android:text="@string/reset_to_original_defaults"
-                android:textSize="14sp" />
-
-        </LinearLayout>
-
-        <!-- Voice Info -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:layout_marginBottom="24dp"
-            android:background="#ffffff"
-            android:padding="16dp"
-            android:elevation="2dp">
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/voice_reading_voice"
-                android:textSize="18sp"
-                android:textStyle="bold"
-                android:layout_marginBottom="8dp"
-                android:textColor="#666666" />
-
-            <Spinner
-                android:id="@+id/voiceSpinner"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="8dp" />
-
-            <TextView
-                android:id="@+id/voiceInfoText"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/voice_hint_alba"
-                android:textSize="14sp"
-                android:textColor="#888888" />
-
-        </LinearLayout>
-
-        <!-- Test Button -->
-        <Button
-            android:id="@+id/testButton"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/test_voice_settings"
-            android:textSize="16sp"
-            android:layout_marginBottom="16dp"
-            android:enabled="false" />
-
-        <!-- Back Button -->
-        <Button
-            android:id="@+id/backButton"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/back_to_pasteit"
-            android:textSize="16sp" />
-
-        <!-- Instructions -->
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="24dp"
-            android:text="@string/tips_n_n_copy_text_while_pasteit_is_running_n_long_press_the_play_button_to_enter_pip_mode_n_pasteit_automatically_enters_pip_when_you_switch_apps_n_use_rewind_fast_forward_to_navigate_through_text_chunks"
-            android:textSize="16sp"
-            android:textColor="#666666"
-            android:lineSpacingExtra="2dp" />
-
-    </LinearLayout>
-
-</ScrollView>
+</LinearLayout>

@@ -1,44 +1,55 @@
 package com.example.pasteit
 
+import android.content.Intent
 import android.content.SharedPreferences
+import android.content.ActivityNotFoundException
+import android.net.Uri
 import android.os.Bundle
 import android.view.View
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.Button
+import android.widget.EditText
+import android.widget.Switch
+import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.SeekBar
 import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
-import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
+import androidx.core.widget.doAfterTextChanged
 
-class SettingsActivity : AppCompatActivity() {
+class SettingsActivity : BaseSwipeActivity() {
+
+    override val swipeIndex = 2
+    override fun isSwipeEnabled(): Boolean = false
     private lateinit var speechRateSeekBar: SeekBar
-    private lateinit var noiseScaleSeekBar: SeekBar
-    private lateinit var noiseScaleWSeekBar: SeekBar
-    private lateinit var lengthScaleSeekBar: SeekBar
-    private lateinit var silenceScaleSeekBar: SeekBar
-    private lateinit var chunkMaxSeekBar: SeekBar
+    private lateinit var speechPitchSeekBar: SeekBar
+    private lateinit var cloudChunkMaxSeekBar: SeekBar
+    private lateinit var androidChunkMaxSeekBar: SeekBar
 
-    private lateinit var noiseScaleValue: TextView
-    private lateinit var noiseScaleWValue: TextView
-    private lateinit var lengthScaleValue: TextView
-    private lateinit var silenceScaleValue: TextView
-    private lateinit var chunkMaxValue: TextView
+    private lateinit var rateValue: TextView
+    private lateinit var pitchValue: TextView
+    private lateinit var cloudChunkMaxValue: TextView
+    private lateinit var androidChunkMaxValue: TextView
 
     private lateinit var testButton: Button
-    private lateinit var resetVoiceDefaultsButton: Button
-    private lateinit var backButton: Button
-    private lateinit var voiceSpinner: Spinner
+    private lateinit var providerSpinner: Spinner
+    private lateinit var xaiVoiceSpinner: Spinner
     private lateinit var speechFormatSpinner: Spinner
-    private lateinit var voiceInfoText: TextView
+    private lateinit var providerInfoText: TextView
+    private lateinit var xaiVoiceInfoText: TextView
+    private lateinit var xaiApiKeyEditText: EditText
+    private lateinit var xaiApiKeyLinkText: TextView
 
-    /** Avoid firing voice reload when [loadSettings] sets the spinner index. */
-    private var voiceSpinnerProgrammatic = false
+    private var providerSpinnerProgrammatic = false
+    private var xaiVoiceSpinnerProgrammatic = false
     private var speechFormatSpinnerProgrammatic = false
+    private lateinit var skipCodeBlocksSwitch: Switch
 
     private lateinit var preferences: SharedPreferences
-    private var testTTS: SherpaOnnxTts? = null
+    private var testTTS: PasteItTts? = null
     private var ttsReady = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -48,6 +59,7 @@ class SettingsActivity : AppCompatActivity() {
         preferences = getSharedPreferences("PasteItSettings", MODE_PRIVATE)
 
         initializeViews()
+        setupNavBar()
         loadSettings()
         setupListeners()
         initializeTestTTS()
@@ -55,29 +67,35 @@ class SettingsActivity : AppCompatActivity() {
 
     private fun initializeViews() {
         speechRateSeekBar = findViewById(R.id.speechRateSeekBar)
-        noiseScaleSeekBar = findViewById(R.id.noiseScaleSeekBar)
-        noiseScaleWSeekBar = findViewById(R.id.noiseScaleWSeekBar)
-        lengthScaleSeekBar = findViewById(R.id.lengthScaleSeekBar)
-        silenceScaleSeekBar = findViewById(R.id.silenceScaleSeekBar)
-        chunkMaxSeekBar = findViewById(R.id.chunkMaxSeekBar)
+        speechPitchSeekBar = findViewById(R.id.speechPitchSeekBar)
+        cloudChunkMaxSeekBar = findViewById(R.id.cloudChunkMaxSeekBar)
+        androidChunkMaxSeekBar = findViewById(R.id.androidChunkMaxSeekBar)
 
-        noiseScaleValue = findViewById(R.id.noiseScaleValue)
-        noiseScaleWValue = findViewById(R.id.noiseScaleWValue)
-        lengthScaleValue = findViewById(R.id.lengthScaleValue)
-        silenceScaleValue = findViewById(R.id.silenceScaleValue)
-        chunkMaxValue = findViewById(R.id.chunkMaxValue)
+        rateValue = findViewById(R.id.rateValue)
+        pitchValue = findViewById(R.id.pitchValue)
+        cloudChunkMaxValue = findViewById(R.id.cloudChunkMaxValue)
+        androidChunkMaxValue = findViewById(R.id.androidChunkMaxValue)
 
         testButton = findViewById(R.id.testButton)
-        resetVoiceDefaultsButton = findViewById(R.id.resetVoiceDefaultsButton)
-        backButton = findViewById(R.id.backButton)
-        voiceSpinner = findViewById(R.id.voiceSpinner)
+        providerSpinner = findViewById(R.id.providerSpinner)
+        xaiVoiceSpinner = findViewById(R.id.xaiVoiceSpinner)
         speechFormatSpinner = findViewById(R.id.speechFormatSpinner)
-        voiceInfoText = findViewById(R.id.voiceInfoText)
+        providerInfoText = findViewById(R.id.providerInfoText)
+        xaiVoiceInfoText = findViewById(R.id.xaiVoiceInfoText)
+        xaiApiKeyEditText = findViewById(R.id.xaiApiKeyEditText)
+        xaiApiKeyLinkText = findViewById(R.id.xaiApiKeyLinkText)
+        skipCodeBlocksSwitch = findViewById(R.id.skipCodeBlocksSwitch)
 
-        voiceSpinner.adapter = ArrayAdapter(
+        providerSpinner.adapter = ArrayAdapter(
             this,
             android.R.layout.simple_spinner_dropdown_item,
-            TtsVoiceProfile.entries.map { getString(it.labelResId) },
+            TtsProviderMode.entries.map { getString(it.labelResId) },
+        )
+
+        xaiVoiceSpinner.adapter = ArrayAdapter(
+            this,
+            android.R.layout.simple_spinner_dropdown_item,
+            XaiVoiceOption.entries.map { getString(it.labelResId) },
         )
 
         speechFormatSpinner.adapter = ArrayAdapter(
@@ -91,67 +109,96 @@ class SettingsActivity : AppCompatActivity() {
         )
 
         speechRateSeekBar.max = 200
+        speechPitchSeekBar.max = 150
+        cloudChunkMaxSeekBar.max =
+            TextChunkingPreferences.MAX_CLOUD_CHUNK_MAX_CHARS - TextChunkingPreferences.MIN_CLOUD_CHUNK_MAX_CHARS
+        androidChunkMaxSeekBar.max =
+            AndroidTtsEngineParams.MAX_CHUNK_MAX_CHARS - AndroidTtsEngineParams.MIN_CHUNK_MAX_CHARS
+    }
 
-        // noise 0.10–1.00 → x1000 [100,1000], progress offset 100
-        noiseScaleSeekBar.max = 900
-        // noiseW 0.10–1.20 → [100,1200]
-        noiseScaleWSeekBar.max = 1100
-        // length 0.50–1.50 → [500,1500]
-        lengthScaleSeekBar.max = 1000
-        // silence 0.05–0.60 → x1000 [50,600]
-        silenceScaleSeekBar.max = 550
-        // chunk chars [120,520]
-        chunkMaxSeekBar.max = 400
+    private fun setupNavBar() {
+        val accent = ContextCompat.getColor(this, R.color.pasteit_accent)
+        val dim = ContextCompat.getColor(this, R.color.pasteit_text_dim)
+
+        val playerTab = findViewById<LinearLayout>(R.id.navPlayerTab)
+        val playerIcon = findViewById<ImageView>(R.id.navPlayerIcon)
+        val playerLabel = findViewById<TextView>(R.id.navPlayerLabel)
+        val libraryTab = findViewById<LinearLayout>(R.id.navLibraryTab)
+        val libraryIcon = findViewById<ImageView>(R.id.navLibraryIcon)
+        val libraryLabel = findViewById<TextView>(R.id.navLibraryLabel)
+        val settingsIcon = findViewById<ImageView>(R.id.navSettingsIcon)
+        val settingsLabel = findViewById<TextView>(R.id.navSettingsLabel)
+
+        // Settings tab is active
+        settingsIcon.setColorFilter(accent)
+        settingsLabel.setTextColor(accent)
+        settingsIcon.alpha = 1f
+        settingsLabel.alpha = 1f
+
+        // Player tab inactive
+        playerIcon.setColorFilter(dim)
+        playerLabel.setTextColor(dim)
+        playerIcon.alpha = 0.4f
+        playerLabel.alpha = 0.4f
+
+        // Library tab inactive
+        libraryIcon.setColorFilter(dim)
+        libraryLabel.setTextColor(dim)
+        libraryIcon.alpha = 0.4f
+        libraryLabel.alpha = 0.4f
+
+        playerTab.setOnClickListener { finish() }
+        libraryTab.setOnClickListener {
+            startActivity(Intent(this, LibraryActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT))
+        }
     }
 
     private fun loadSettings() {
         val savedRate = preferences.getInt(
-            SherpaTtsEngineParams.PREF_SPEECH_RATE,
-            SherpaTtsEngineParams.DEFAULT_SPEECH_RATE_PERCENT,
+            AndroidTtsEngineParams.PREF_SPEECH_RATE,
+            AndroidTtsEngineParams.DEFAULT_SPEECH_RATE_PERCENT,
         )
         speechRateSeekBar.progress = savedRate
-        findViewById<TextView>(R.id.rateValue).text = getString(R.string.percent_int, savedRate)
+        rateValue.text = getString(R.string.percent_int, savedRate)
 
-        val n = preferences.getInt(
-            SherpaTtsEngineParams.PREF_NOISE_SCALE_X1000,
-            SherpaTtsEngineParams.DEFAULT_NOISE_SCALE_X1000,
-        ).coerceIn(100, 1000)
-        noiseScaleSeekBar.progress = n - 100
-        updateNoiseLabel()
+        val savedPitch = preferences.getInt(
+            AndroidTtsEngineParams.PREF_SPEECH_PITCH,
+            AndroidTtsEngineParams.DEFAULT_SPEECH_PITCH_PERCENT,
+        ).coerceIn(50, 200)
+        speechPitchSeekBar.progress = savedPitch - 50
+        pitchValue.text = getString(R.string.percent_int, savedPitch)
 
-        val nw = preferences.getInt(
-            SherpaTtsEngineParams.PREF_NOISE_SCALE_W_X1000,
-            SherpaTtsEngineParams.DEFAULT_NOISE_SCALE_W_X1000,
-        ).coerceIn(100, 1200)
-        noiseScaleWSeekBar.progress = nw - 100
-        updateNoiseWLabel()
+        val cloudChunk = TextChunkingPreferences.cloudChunkMax(preferences)
+        cloudChunkMaxSeekBar.progress = cloudChunk - TextChunkingPreferences.MIN_CLOUD_CHUNK_MAX_CHARS
+        updateCloudChunkLabel()
 
-        val len = preferences.getInt(
-            SherpaTtsEngineParams.PREF_LENGTH_SCALE_X1000,
-            SherpaTtsEngineParams.DEFAULT_LENGTH_SCALE_X1000,
-        ).coerceIn(500, 1500)
-        lengthScaleSeekBar.progress = len - 500
-        updateLengthLabel()
+        val androidChunk = preferences.getInt(
+            AndroidTtsEngineParams.PREF_CHUNK_MAX_CHARS,
+            AndroidTtsEngineParams.DEFAULT_CHUNK_MAX_CHARS,
+        ).coerceIn(
+            AndroidTtsEngineParams.MIN_CHUNK_MAX_CHARS,
+            AndroidTtsEngineParams.MAX_CHUNK_MAX_CHARS,
+        )
+        androidChunkMaxSeekBar.progress = androidChunk - AndroidTtsEngineParams.MIN_CHUNK_MAX_CHARS
+        updateAndroidChunkLabel()
 
-        val sil = preferences.getInt(
-            SherpaTtsEngineParams.PREF_SILENCE_SCALE_X1000,
-            SherpaTtsEngineParams.DEFAULT_SILENCE_SCALE_X1000,
-        ).coerceIn(50, 600)
-        silenceScaleSeekBar.progress = sil - 50
-        updateSilenceLabel()
+        val provider = TtsProviderMode.fromPreferences(preferences)
+        providerSpinnerProgrammatic = true
+        providerSpinner.setSelection(TtsProviderMode.entries.indexOf(provider).coerceAtLeast(0))
+        providerSpinnerProgrammatic = false
+        updateProviderHint(provider)
+        updateCloudControls(provider)
 
-        val chunk = preferences.getInt(
-            SherpaTtsEngineParams.PREF_CHUNK_MAX_CHARS,
-            SherpaTtsEngineParams.DEFAULT_CHUNK_MAX_CHARS,
-        ).coerceIn(120, 520)
-        chunkMaxSeekBar.progress = chunk - 120
-        updateChunkLabel()
+        val xaiVoice = XaiVoiceOption.fromPreferences(preferences)
+        xaiVoiceSpinnerProgrammatic = true
+        xaiVoiceSpinner.setSelection(XaiVoiceOption.entries.indexOf(xaiVoice).coerceAtLeast(0))
+        xaiVoiceSpinnerProgrammatic = false
+        updateXaiVoiceHint(xaiVoice)
 
-        val voice = TtsVoiceProfile.fromPreferences(preferences)
-        voiceSpinnerProgrammatic = true
-        voiceSpinner.setSelection(TtsVoiceProfile.entries.indexOf(voice).coerceAtLeast(0))
-        voiceSpinnerProgrammatic = false
-        updateVoiceHint(voice)
+        xaiApiKeyEditText.setText(preferences.getString(XaiVoiceOption.PREF_XAI_API_KEY, "").orEmpty())
+
+        skipCodeBlocksSwitch.isChecked =
+            preferences.getBoolean(SpeechFormattingPreferences.PREF_SKIP_CODE_BLOCKS, false)
 
         val mode = SpeechFormatMode.fromPreferences(preferences)
         speechFormatSpinnerProgrammatic = true
@@ -165,99 +212,97 @@ class SettingsActivity : AppCompatActivity() {
         speechFormatSpinnerProgrammatic = false
     }
 
-    private fun updateVoiceHint(profile: TtsVoiceProfile) {
-        voiceInfoText.text = getString(profile.hintResId)
+    private fun updateProviderHint(provider: TtsProviderMode) {
+        providerInfoText.text = getString(provider.hintResId)
     }
 
-    private fun noiseStored(): Int = noiseScaleSeekBar.progress + 100
-    private fun noiseWStored(): Int = noiseScaleWSeekBar.progress + 100
-    private fun lengthStored(): Int = lengthScaleSeekBar.progress + 500
-    private fun silenceStored(): Int = silenceScaleSeekBar.progress + 50
-    private fun chunkStored(): Int = chunkMaxSeekBar.progress + 120
-
-    private fun updateNoiseLabel() {
-        noiseScaleValue.text = getString(R.string.float_2, noiseStored() / 1000f)
+    private fun updateXaiVoiceHint(voice: XaiVoiceOption) {
+        xaiVoiceInfoText.text = getString(voice.hintResId)
     }
 
-    private fun updateNoiseWLabel() {
-        noiseScaleWValue.text = getString(R.string.float_2, noiseWStored() / 1000f)
+    private fun updateCloudControls(provider: TtsProviderMode) {
+        val xaiEnabled = provider != TtsProviderMode.ANDROID
+        xaiApiKeyEditText.isEnabled = xaiEnabled
+        xaiApiKeyLinkText.isEnabled = xaiEnabled
+        xaiApiKeyLinkText.alpha = if (xaiEnabled) 1f else 0.5f
+        xaiVoiceSpinner.isEnabled = xaiEnabled
+        cloudChunkMaxSeekBar.isEnabled = xaiEnabled
+        xaiVoiceInfoText.alpha = if (xaiEnabled) 1f else 0.5f
+        cloudChunkMaxValue.alpha = if (xaiEnabled) 1f else 0.5f
     }
 
-    private fun updateLengthLabel() {
-        lengthScaleValue.text = getString(R.string.float_2, lengthStored() / 1000f)
+    private fun cloudChunkStored(): Int =
+        cloudChunkMaxSeekBar.progress + TextChunkingPreferences.MIN_CLOUD_CHUNK_MAX_CHARS
+
+    private fun androidChunkStored(): Int =
+        androidChunkMaxSeekBar.progress + AndroidTtsEngineParams.MIN_CHUNK_MAX_CHARS
+
+    private fun updateCloudChunkLabel() {
+        cloudChunkMaxValue.text = getString(R.string.int_value, cloudChunkStored())
     }
 
-    private fun updateSilenceLabel() {
-        silenceScaleValue.text = getString(R.string.float_2, silenceStored() / 1000f)
-    }
-
-    private fun updateChunkLabel() {
-        chunkMaxValue.text = getString(R.string.int_value, chunkStored())
+    private fun updateAndroidChunkLabel() {
+        androidChunkMaxValue.text = getString(R.string.int_value, androidChunkStored())
     }
 
     private fun setupListeners() {
         speechRateSeekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                findViewById<TextView>(R.id.rateValue).text = getString(R.string.percent_int, progress)
+                rateValue.text = getString(R.string.percent_int, progress)
                 if (fromUser) saveSettings()
             }
-
-            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
-            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+            override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
+            override fun onStopTrackingTouch(seekBar: SeekBar?) = Unit
         })
 
-        val vitsListener = object : SeekBar.OnSeekBarChangeListener {
+        speechPitchSeekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                when (seekBar?.id) {
-                    R.id.noiseScaleSeekBar -> updateNoiseLabel()
-                    R.id.noiseScaleWSeekBar -> updateNoiseWLabel()
-                    R.id.lengthScaleSeekBar -> updateLengthLabel()
-                }
-            }
-
-            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
-            override fun onStopTrackingTouch(seekBar: SeekBar?) {
-                saveSettings()
-                applyVitsToTestTts()
-            }
-        }
-        noiseScaleSeekBar.setOnSeekBarChangeListener(vitsListener)
-        noiseScaleWSeekBar.setOnSeekBarChangeListener(vitsListener)
-        lengthScaleSeekBar.setOnSeekBarChangeListener(vitsListener)
-
-        silenceScaleSeekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                updateSilenceLabel()
-                if (fromUser) {
-                    saveSettings()
-                    applyGenerationPrefsToTestTts()
-                }
-            }
-
-            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
-            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
-        })
-
-        chunkMaxSeekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                updateChunkLabel()
+                pitchValue.text = getString(R.string.percent_int, progress + 50)
                 if (fromUser) saveSettings()
             }
-
-            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
-            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+            override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
+            override fun onStopTrackingTouch(seekBar: SeekBar?) = Unit
         })
 
-        testButton.setOnClickListener {
-            testVoiceSettings()
+        cloudChunkMaxSeekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                updateCloudChunkLabel()
+                if (fromUser) saveSettings()
+            }
+            override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
+            override fun onStopTrackingTouch(seekBar: SeekBar?) = Unit
+        })
+
+        androidChunkMaxSeekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                updateAndroidChunkLabel()
+                if (fromUser) saveSettings()
+            }
+            override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
+            override fun onStopTrackingTouch(seekBar: SeekBar?) = Unit
+        })
+
+        providerSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                if (providerSpinnerProgrammatic) return
+                val provider = TtsProviderMode.entries.getOrNull(position) ?: return
+                preferences.edit().putString(TtsProviderMode.PREF_TTS_PROVIDER, provider.prefValue).apply()
+                updateProviderHint(provider)
+                updateCloudControls(provider)
+                applySettingsToTestTts()
+            }
+            override fun onNothingSelected(parent: AdapterView<*>?) = Unit
         }
 
-        resetVoiceDefaultsButton.setOnClickListener {
-            resetVoiceSettingsToDefaults()
-        }
-
-        backButton.setOnClickListener {
-            finish()
+        xaiVoiceSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                if (xaiVoiceSpinnerProgrammatic) return
+                val voice = XaiVoiceOption.entries.getOrNull(position) ?: return
+                preferences.edit().putString(XaiVoiceOption.PREF_XAI_VOICE, voice.prefValue).apply()
+                updateXaiVoiceHint(voice)
+                applySettingsToTestTts()
+            }
+            override fun onNothingSelected(parent: AdapterView<*>?) = Unit
         }
 
         speechFormatSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
@@ -270,53 +315,46 @@ class SettingsActivity : AppCompatActivity() {
                 }
                 preferences.edit().putString(SpeechFormattingPreferences.PREF_MODE, value).apply()
             }
-
-            override fun onNothingSelected(parent: AdapterView<*>?) {}
+            override fun onNothingSelected(parent: AdapterView<*>?) = Unit
         }
-    }
 
-    private fun resetVoiceSettingsToDefaults() {
-        preferences.edit().apply {
-            SherpaTtsEngineParams.writeFactoryVoiceDefaults(this)
-            apply()
+        xaiApiKeyEditText.doAfterTextChanged { editable ->
+            preferences.edit()
+                .putString(XaiVoiceOption.PREF_XAI_API_KEY, editable?.toString().orEmpty())
+                .apply()
         }
-        loadSettings()
-        Toast.makeText(this, getString(R.string.defaults_restored), Toast.LENGTH_SHORT).show()
-        if (ttsReady) {
-            applyVitsToTestTts()
+
+        xaiApiKeyLinkText.setOnClickListener {
+            val browseIntent = Intent(Intent.ACTION_VIEW, Uri.parse(XAI_CONSOLE_URL))
+            try {
+                startActivity(browseIntent)
+            } catch (_: ActivityNotFoundException) {
+                Toast.makeText(this, getString(R.string.no_browser_found), Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        testButton.setOnClickListener { testVoiceSettings() }
+
+        skipCodeBlocksSwitch.setOnCheckedChangeListener { _, checked ->
+            preferences.edit()
+                .putBoolean(SpeechFormattingPreferences.PREF_SKIP_CODE_BLOCKS, checked)
+                .apply()
         }
     }
 
     private fun saveSettings() {
         preferences.edit().apply {
-            putInt(SherpaTtsEngineParams.PREF_SPEECH_RATE, speechRateSeekBar.progress)
-            putInt(SherpaTtsEngineParams.PREF_NOISE_SCALE_X1000, noiseStored())
-            putInt(SherpaTtsEngineParams.PREF_NOISE_SCALE_W_X1000, noiseWStored())
-            putInt(SherpaTtsEngineParams.PREF_LENGTH_SCALE_X1000, lengthStored())
-            putInt(SherpaTtsEngineParams.PREF_SILENCE_SCALE_X1000, silenceStored())
-            putInt(SherpaTtsEngineParams.PREF_CHUNK_MAX_CHARS, chunkStored())
+            putInt(AndroidTtsEngineParams.PREF_SPEECH_RATE, speechRateSeekBar.progress)
+            putInt(AndroidTtsEngineParams.PREF_SPEECH_PITCH, speechPitchSeekBar.progress + 50)
+            putInt(AndroidTtsEngineParams.PREF_CHUNK_MAX_CHARS, androidChunkStored())
+            putInt(TextChunkingPreferences.PREF_CLOUD_CHUNK_MAX_CHARS, cloudChunkStored())
             apply()
         }
     }
 
-    private fun applyVitsToTestTts() {
+    private fun applySettingsToTestTts() {
         if (!ttsReady) return
-        testButton.isEnabled = false
-        testButton.text = getString(R.string.reloading_voice)
-        testTTS?.applyPreferences(
-            preferences,
-            speechRateFromUi = speechRateSeekBar.progress / 100f,
-        ) { ok ->
-            testButton.text = getString(R.string.test_voice_settings)
-            testButton.isEnabled = ok && ttsReady
-            if (!ok) {
-                Toast.makeText(this, getString(R.string.tts_init_failed), Toast.LENGTH_LONG).show()
-            }
-        }
-    }
-
-    private fun applyGenerationPrefsToTestTts() {
-        if (!ttsReady) return
+        saveSettings()
         testTTS?.applyPreferences(
             preferences,
             speechRateFromUi = speechRateSeekBar.progress / 100f,
@@ -328,19 +366,15 @@ class SettingsActivity : AppCompatActivity() {
         testButton.isEnabled = false
         testButton.text = getString(R.string.loading_tts)
 
-        testTTS = SherpaOnnxTts(this)
-        testTTS?.setCallback(object : SherpaOnnxTts.TtsCallback {
+        testTTS = PasteItTts(this)
+        testTTS?.setCallback(object : AppTtsCallback {
             override fun onInitialized(success: Boolean) {
                 runOnUiThread {
                     ttsReady = success
                     testButton.isEnabled = success
                     testButton.text = getString(R.string.test_voice_settings)
                     if (!success) {
-                        Toast.makeText(
-                            this@SettingsActivity,
-                            getString(R.string.tts_init_failed),
-                            Toast.LENGTH_LONG,
-                        ).show()
+                        Toast.makeText(this@SettingsActivity, getString(R.string.tts_init_failed), Toast.LENGTH_LONG).show()
                     }
                 }
             }
@@ -363,18 +397,12 @@ class SettingsActivity : AppCompatActivity() {
                 runOnUiThread {
                     testButton.isEnabled = true
                     testButton.text = getString(R.string.test_voice_settings)
-                    Toast.makeText(
-                        this@SettingsActivity,
-                        getString(R.string.tts_error, error),
-                        Toast.LENGTH_SHORT,
-                    ).show()
+                    Toast.makeText(this@SettingsActivity, getString(R.string.tts_error, error), Toast.LENGTH_SHORT).show()
                 }
             }
         })
 
-        testTTS?.initialize(preferences) {
-            // Detailed UI handled in callback
-        }
+        testTTS?.initialize(preferences) { }
     }
 
     private fun testVoiceSettings() {
@@ -387,14 +415,15 @@ class SettingsActivity : AppCompatActivity() {
         val rate = speechRateSeekBar.progress / 100f
         testTTS?.applyPreferences(preferences, speechRateFromUi = rate, onComplete = null)
         testTTS?.setSpeechRate(rate)
-        testTTS?.speak(
-            getString(R.string.test_voice_phrase_stocks),
-            "test",
-        )
+        testTTS?.speak(getString(R.string.test_voice_phrase_stocks), "test")
     }
 
     override fun onDestroy() {
         super.onDestroy()
         testTTS?.release()
+    }
+
+    companion object {
+        private const val XAI_CONSOLE_URL = "https://console.x.ai/home"
     }
 }

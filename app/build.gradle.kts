@@ -16,15 +16,6 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        ndk {
-            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
-        }
-    }
-
-    sourceSets {
-        getByName("main") {
-            jniLibs.srcDirs("src/main/jniLibs")
-        }
     }
 
     buildTypes {
@@ -52,11 +43,10 @@ dependencies {
     implementation(libs.material)
     implementation(libs.commonmark)
     implementation(libs.kotlinx.coroutines.android)
-    testImplementation(libs.junit)
-    androidTestImplementation(libs.androidx.junit)
-    androidTestImplementation(libs.androidx.espresso.core)
-
-    testImplementation(libs.junit)
+    implementation("androidx.media3:media3-exoplayer:1.4.1")
+    implementation("androidx.media:media:1.7.0")
+    implementation("io.github.maxrave-dev:ffmpeg-kit-audio:6.0.1")
+    implementation("com.mpatric:mp3agic:0.9.1")
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
