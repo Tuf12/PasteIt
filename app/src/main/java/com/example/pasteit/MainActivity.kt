@@ -1,5 +1,6 @@
 package com.example.pasteit
 
+import android.annotation.SuppressLint
 import android.app.Activity
 import android.app.PendingIntent
 import android.app.PictureInPictureParams
@@ -17,10 +18,15 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
-import android.text.method.LinkMovementMethod
+import android.os.SystemClock
+import android.text.Spannable
+import android.text.SpannableStringBuilder
+import android.text.style.BackgroundColorSpan
 import android.util.Log
 import android.util.Rational
+import android.view.MotionEvent
 import android.view.View
+import android.view.ViewConfiguration
 import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.ImageView
@@ -86,8 +92,8 @@ class MainActivity : BaseSwipeActivity() {
     private var isSeeking = false
     private var pendingLibrarySelectionId: String? = null
 
-    // Polls ExoPlayer position every 300 ms while xAI audio is playing so the
-    // SeekBar thumb animates smoothly within the current chunk.
+    // Polls playback position every 300 ms so the SeekBar thumb animates smoothly within
+    // the current chunk and the reading-band highlight advances alongside it.
     private val seekBarHandler = Handler(Looper.getMainLooper())
     private val seekBarRunnable = object : Runnable {
         override fun run() {
@@ -99,14 +105,36 @@ class MainActivity : BaseSwipeActivity() {
                     val posMs = service.getCurrentChunkPositionMs()
                     val durMs = service.getCurrentChunkDurationMs()
                     val within = if (durMs > 0) (posMs * SEEK_RESOLUTION / durMs).toInt() else 0
-                    chunkProgressBar.max = totalChunks * SEEK_RESOLUTION
+                    val maxProgress = (totalChunks * SEEK_RESOLUTION - 1).coerceAtLeast(SEEK_RESOLUTION)
+                    chunkProgressBar.max = maxProgress
                     chunkProgressBar.progress = (chunkIndex0 * SEEK_RESOLUTION + within)
-                        .coerceIn(0, totalChunks * SEEK_RESOLUTION)
+                        .coerceIn(0, maxProgress)
                 }
+                maybeRefreshReadingHighlight(service)
             }
             seekBarHandler.postDelayed(this, 300L)
         }
     }
+
+    // Cached plain-text Spannable so the 300ms poll only re-applies the highlight span.
+    private var cachedPlainSource: String = ""
+    private var cachedPlainDisplay: SpannableStringBuilder? = null
+    // Previously applied highlight span so we can swap it in-place without rebuilding the text.
+    private var appliedHighlightSpan: BackgroundColorSpan? = null
+    // Throttle state for the reading band refresh.
+    private var lastAppliedRangeStart: Int = Int.MIN_VALUE
+    private var lastHighlightUpdateMs: Long = 0L
+
+    // Follow-mode state: auto-scroll the text view so the reading band stays visible.
+    private var followModeEnabled: Boolean = true
+    private var userTouchingTextContainer: Boolean = false
+    private var lastScrollRequestY: Int = Int.MIN_VALUE
+
+    // Tap-to-seek gesture tracking on the text display.
+    private var tapDownX: Float = 0f
+    private var tapDownY: Float = 0f
+    private var tapDownTimeMs: Long = 0L
+    private var tapMoved: Boolean = false
 
     private lateinit var preferences: SharedPreferences
     private lateinit var savedContentStore: SavedContentStore
@@ -147,7 +175,7 @@ class MainActivity : BaseSwipeActivity() {
             clipboardService?.setClipboardListener { clipText ->
                 runOnUiThread {
                     Log.d("PasteItMain", "Received clipboard text: ${clipText.take(50)}...")
-                    textDisplay.text = MarkdownFormatter.markdownToSpanned(clipText)
+                    updateTextDisplay(clipText)
                     isSaved = clipboardService?.isLibraryItemActive() == true
                     refreshUi()
                 }
@@ -292,8 +320,8 @@ class MainActivity : BaseSwipeActivity() {
         stockFormatButton = findViewById(R.id.stockFormatButton)
         bookmarkButton = findViewById(R.id.bookmarkButton)
         textDisplay = findViewById(R.id.textDisplay)
-        textDisplay.movementMethod = LinkMovementMethod.getInstance()
         textContainer = findViewById(R.id.textContainer)
+        installReaderInteractionHandlers()
         ttsProgressBar = findViewById(R.id.ttsProgressBar)
         playbackStatusText = findViewById(R.id.playbackStatusText)
         cacheStatusText = findViewById(R.id.cacheStatusText)
@@ -306,8 +334,8 @@ class MainActivity : BaseSwipeActivity() {
             }
             override fun onStopTrackingTouch(seekBar: SeekBar) {
                 isSeeking = false
-                val nearestChunk = (seekBar.progress + (SEEK_RESOLUTION / 2)) / SEEK_RESOLUTION
-                clipboardService?.seekToChunk(nearestChunk)
+                clipboardService?.seekToProgress(seekBar.progress, SEEK_RESOLUTION)
+                refreshUi()
             }
             override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) {}
         })
@@ -599,12 +627,172 @@ class MainActivity : BaseSwipeActivity() {
 
         // Only update bar if user isn't dragging; polling handler handles live position.
         if (!isSeeking) {
-            chunkProgressBar.max = (totalChunks * SEEK_RESOLUTION).coerceAtLeast(SEEK_RESOLUTION)
-            chunkProgressBar.progress = if (hasText && totalChunks > 0) chunkIndex0 * SEEK_RESOLUTION else 0
+            val maxProgress = (totalChunks * SEEK_RESOLUTION - 1).coerceAtLeast(SEEK_RESOLUTION)
+            chunkProgressBar.max = maxProgress
+            chunkProgressBar.progress = if (hasText && totalChunks > 0) {
+                (chunkIndex0 * SEEK_RESOLUTION).coerceIn(0, maxProgress)
+            } else {
+                0
+            }
         }
 
         updateStartOverButton()
         updateMaxChunkButton()
+        updateTextDisplay(sourceText)
+    }
+
+    /**
+     * Renders the reader body using the TTS-aligned plain text from the service. The body is
+     * cached and reused across polls; only the [BackgroundColorSpan] tracking the estimated
+     * reading band is swapped in place. [sourceText] is kept in the signature for compatibility
+     * with existing callers but is ignored when the service is bound — the service's
+     * [ClipboardMonitorService.getPlaybackPlainText] is authoritative.
+     */
+    private fun updateTextDisplay(@Suppress("UNUSED_PARAMETER") sourceText: String) {
+        val service = clipboardService
+        val plain = service?.getPlaybackPlainText().orEmpty()
+        if (plain.isBlank()) {
+            textDisplay.text = ""
+            cachedPlainDisplay = null
+            cachedPlainSource = ""
+            appliedHighlightSpan = null
+            lastAppliedRangeStart = Int.MIN_VALUE
+            return
+        }
+
+        val display = plainDisplayFor(plain)
+        val range = service?.getEstimatedReadingRangeInDocument() ?: IntRange.EMPTY
+        applyHighlightSpan(display, range)
+        textDisplay.text = display
+
+        lastAppliedRangeStart = if (range.isEmpty()) Int.MIN_VALUE else range.first
+        lastHighlightUpdateMs = SystemClock.elapsedRealtime()
+        scrollToReadingBandIfFollowing(range)
+    }
+
+    private fun plainDisplayFor(plainText: String): SpannableStringBuilder {
+        val cached = cachedPlainDisplay
+        if (cached != null && cachedPlainSource == plainText) return cached
+        val fresh = SpannableStringBuilder(plainText)
+        cachedPlainSource = plainText
+        cachedPlainDisplay = fresh
+        appliedHighlightSpan = null
+        followModeEnabled = true
+        return fresh
+    }
+
+    private fun applyHighlightSpan(builder: SpannableStringBuilder, range: IntRange) {
+        appliedHighlightSpan?.let { builder.removeSpan(it) }
+        if (range.isEmpty()) {
+            appliedHighlightSpan = null
+            return
+        }
+        val start = range.first.coerceIn(0, builder.length)
+        val end = (range.last + 1).coerceIn(start, builder.length)
+        if (end <= start) {
+            appliedHighlightSpan = null
+            return
+        }
+        val span = BackgroundColorSpan(ContextCompat.getColor(this, R.color.pasteit_accent_soft))
+        builder.setSpan(span, start, end, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        appliedHighlightSpan = span
+    }
+
+    private fun maybeRefreshReadingHighlight(service: ClipboardMonitorService) {
+        val range = service.getEstimatedReadingRangeInDocument()
+        val start = if (range.isEmpty()) Int.MIN_VALUE else range.first
+        val now = SystemClock.elapsedRealtime()
+        val moved = start != Int.MIN_VALUE &&
+            kotlin.math.abs(start - lastAppliedRangeStart) >= HIGHLIGHT_MOVE_THRESHOLD_CHARS
+        val stale = now - lastHighlightUpdateMs >= HIGHLIGHT_MIN_REFRESH_MS
+        if (!moved && !stale) return
+        updateTextDisplay(service.getCurrentSourceText())
+    }
+
+    @SuppressLint("ClickableViewAccessibility")
+    private fun installReaderInteractionHandlers() {
+        val touchSlop = ViewConfiguration.get(this).scaledTouchSlop
+        val tapTimeoutMs = ViewConfiguration.getTapTimeout().toLong() * 2L
+
+        textDisplay.setOnTouchListener { _, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    tapDownX = event.x
+                    tapDownY = event.y
+                    tapDownTimeMs = SystemClock.elapsedRealtime()
+                    tapMoved = false
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    if (!tapMoved &&
+                        (kotlin.math.abs(event.x - tapDownX) > touchSlop ||
+                            kotlin.math.abs(event.y - tapDownY) > touchSlop)
+                    ) {
+                        tapMoved = true
+                    }
+                }
+                MotionEvent.ACTION_UP -> {
+                    val elapsed = SystemClock.elapsedRealtime() - tapDownTimeMs
+                    if (!tapMoved && elapsed <= tapTimeoutMs) {
+                        handleReaderTap(event.x, event.y)
+                    }
+                }
+            }
+            false
+        }
+
+        textContainer.setOnTouchListener { _, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> userTouchingTextContainer = true
+                MotionEvent.ACTION_UP,
+                MotionEvent.ACTION_CANCEL,
+                -> userTouchingTextContainer = false
+            }
+            false
+        }
+
+        textContainer.setOnScrollChangeListener { _, _, scrollY, _, oldScrollY ->
+            if (!followModeEnabled) return@setOnScrollChangeListener
+            val isLikelyUser = userTouchingTextContainer &&
+                kotlin.math.abs(scrollY - lastScrollRequestY) > AUTO_SCROLL_TOLERANCE_PX
+            val delta = kotlin.math.abs(scrollY - oldScrollY)
+            if (isLikelyUser && delta > AUTO_SCROLL_TOLERANCE_PX) {
+                followModeEnabled = false
+            }
+        }
+    }
+
+    private fun handleReaderTap(x: Float, y: Float) {
+        val service = clipboardService ?: return
+        if (service.getPlaybackPlainText().isBlank()) return
+        val offset = textDisplay.getOffsetForPosition(x, y)
+        if (offset < 0) return
+        service.seekToDocumentPlainOffset(offset)
+        followModeEnabled = true
+        maybeRefreshReadingHighlight(service)
+    }
+
+    /**
+     * Keeps the reading band roughly one-third down the viewport while [followModeEnabled] is
+     * true. The scroll request is posted so it runs after layout, which is required for
+     * [android.text.Layout.getLineForOffset] to have valid metrics.
+     */
+    private fun scrollToReadingBandIfFollowing(range: IntRange) {
+        if (!followModeEnabled || range.isEmpty()) return
+        val focus = range.first
+        textDisplay.post {
+            val layout = textDisplay.layout ?: return@post
+            val boundedOffset = focus.coerceIn(0, textDisplay.text.length)
+            val line = layout.getLineForOffset(boundedOffset)
+            val lineTop = layout.getLineTop(line)
+            val viewportHeight = textContainer.height
+            val viewportThird = viewportHeight / 3
+            val targetY = (lineTop + textDisplay.paddingTop - viewportThird).coerceAtLeast(0)
+            val maxScroll = (textDisplay.height - viewportHeight).coerceAtLeast(0)
+            val clampedY = targetY.coerceAtMost(maxScroll)
+            if (kotlin.math.abs(clampedY - textContainer.scrollY) < FOLLOW_SCROLL_EPSILON_PX) return@post
+            lastScrollRequestY = clampedY
+            textContainer.smoothScrollTo(0, clampedY)
+        }
     }
 
     private fun renderDocumentMeta() {
@@ -848,10 +1036,10 @@ class MainActivity : BaseSwipeActivity() {
         // Progress
         pipChunkProgressBar.max = totalChunks.coerceAtLeast(1)
         pipChunkProgressBar.progress = if (hasText && totalChunks > 0) chunkIndex.coerceAtLeast(1) else 0
-        pipChunkText.text = if (totalChunks > 0) {
-            getString(R.string.chunk_of_total, chunkIndex.coerceAtLeast(1), totalChunks)
-        } else {
-            ""
+        pipChunkText.text = when {
+            totalChunks <= 0 -> ""
+            isPlayingNow || isPausedNow -> buildPipReadingLabel(chunkIndex, totalChunks)
+            else -> getString(R.string.chunk_of_total, chunkIndex.coerceAtLeast(1), totalChunks)
         }
 
         // Status dot + label
@@ -866,6 +1054,28 @@ class MainActivity : BaseSwipeActivity() {
         dotDrawable?.setColor(ContextCompat.getColor(this, statusColor))
         pipStatusLabel.text = getString(statusString)
         pipStatusLabel.setTextColor(ContextCompat.getColor(this, statusColor))
+    }
+
+    private fun buildPipReadingLabel(chunkIndex: Int, totalChunks: Int): String {
+        val service = clipboardService
+        val chunkLabel = getString(R.string.chunk_of_total, chunkIndex.coerceAtLeast(1), totalChunks)
+        val plain = service?.getPlaybackPlainText().orEmpty()
+        val range = service?.getEstimatedReadingRangeInDocument() ?: IntRange.EMPTY
+        if (plain.isEmpty() || range.isEmpty()) return chunkLabel
+
+        val center = (range.first + range.last) / 2
+        val halfWidth = EXCERPT_FALLBACK_CHARS / 2
+        val rawStart = (center - halfWidth).coerceAtLeast(0)
+        val rawEnd = (center + halfWidth).coerceAtMost(plain.length)
+        var s = rawStart
+        while (s > 0 && !plain[s - 1].isWhitespace() && rawStart - s < EXCERPT_SNAP_CHARS) s--
+        var e = rawEnd
+        while (e < plain.length && !plain[e].isWhitespace() && e - rawEnd < EXCERPT_SNAP_CHARS) e++
+        val prefix = if (s > 0) "…" else ""
+        val suffix = if (e < plain.length) "…" else ""
+        val middle = plain.substring(s, e).replace(Regex("\\s+"), " ").trim()
+        if (middle.isEmpty()) return chunkLabel
+        return "$chunkLabel · $prefix$middle$suffix"
     }
 
     override fun onUserLeaveHint() {
@@ -886,5 +1096,23 @@ class MainActivity : BaseSwipeActivity() {
     companion object {
         /** Sub-units per chunk — gives smooth within-chunk animation without rebuilding chunks. */
         private const val SEEK_RESOLUTION = 100
+
+        /** Minimum jump in band-start (chunk chars) that justifies rebuilding the text display. */
+        private const val HIGHLIGHT_MOVE_THRESHOLD_CHARS = 40
+
+        /** Maximum time between band refreshes while playing, even if the start index is stable. */
+        private const val HIGHLIGHT_MIN_REFRESH_MS = 800L
+
+        /** Head-of-chunk excerpt length used before the estimator has a usable range. */
+        private const val EXCERPT_FALLBACK_CHARS = 96
+
+        /** How far the excerpt builder will search for a word boundary past the band edges. */
+        private const val EXCERPT_SNAP_CHARS = 20
+
+        /** Suppress follow-mode scrolls smaller than this (px) — avoids jitter from tiny shifts. */
+        private const val FOLLOW_SCROLL_EPSILON_PX = 12
+
+        /** Scroll delta (px) during an auto-scroll that is still considered programmatic. */
+        private const val AUTO_SCROLL_TOLERANCE_PX = 24
     }
 }

@@ -13,6 +13,7 @@ import android.os.Binder
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.os.SystemClock
 import android.support.v4.media.MediaMetadataCompat
 import android.support.v4.media.session.MediaSessionCompat
 import android.support.v4.media.session.PlaybackStateCompat
@@ -27,6 +28,8 @@ class ClipboardMonitorService : Service() {
     private var currentText = ""
     private var currentPosition = 0
     private var textChunks = listOf<String>()
+    /** Document ranges (half-open) into [currentText] paired with [textChunks]. */
+    private var chunkDocumentRanges = listOf<IntRange>()
     private var isPlaying = false
     private var isPaused = false
     private var ttsInitialized = false
@@ -50,10 +53,26 @@ class ClipboardMonitorService : Service() {
     /** Set when a resume position > 0 is restored from persistence; consumed once by the UI. */
     private var pendingResumeHint: Pair<Int, Int>? = null
     private var averageChunkDurationMs: Long = 0L
+    private var pendingResumeSeekMs: Long = 0L
+
+    /** Wall-clock anchor for the Android-TTS synthetic position; 0 when the xAI engine is active. */
+    private var syntheticUtteranceStartRealtimeMs: Long = 0L
+
+    /** Reading schedule for the chunk currently being spoken, lazily (re)built when [currentPosition] changes. */
+    private var currentChunkSchedule: ReadingSchedule? = null
+    private var scheduleSourceChunk: String = ""
 
     private val mainHandler = Handler(Looper.getMainLooper())
     /** Posted after a chunk finishes so we never call speak() re-entrantly from onSpeakDone. */
     private val playNextChunkRunnable = Runnable { startPlayback() }
+    private val progressPersistRunnable = object : Runnable {
+        override fun run() {
+            if (isPlaying) {
+                persistResumePosition(includePlaybackPosition = true)
+                mainHandler.postDelayed(this, RESUME_PERSIST_INTERVAL_MS)
+            }
+        }
+    }
 
     interface TTSListener {
         fun onPlaybackBuffering()
@@ -112,6 +131,17 @@ class ClipboardMonitorService : Service() {
                 Log.d("PasteItService", "TTS started: $utteranceId")
                 isPlaying = true
                 isPaused = false
+                val resumeOffsetMs = pendingResumeSeekMs.coerceAtLeast(0L)
+                if (pendingResumeSeekMs > 0L) {
+                    ttsEngine?.seekWithinChunk(pendingResumeSeekMs)
+                    pendingResumeSeekMs = 0L
+                }
+                syntheticUtteranceStartRealtimeMs =
+                    if (ttsEngine?.isSeekable() == true) 0L
+                    else SystemClock.elapsedRealtime() - resumeOffsetMs
+                ensureReadingSchedule()
+                mainHandler.removeCallbacks(progressPersistRunnable)
+                mainHandler.postDelayed(progressPersistRunnable, RESUME_PERSIST_INTERVAL_MS)
                 ttsListener?.onPlaybackStarted()
                 updateMediaSession()
                 updateNotification()
@@ -121,10 +151,12 @@ class ClipboardMonitorService : Service() {
                 Log.d("PasteItService", "TTS finished: $utteranceId")
                 isPlaying = false
                 isPaused = false
+                syntheticUtteranceStartRealtimeMs = 0L
 
                 if (currentPosition < textChunks.size - 1) {
                     currentPosition++
-                    persistResumePosition()
+                    invalidateReadingSchedule()
+                    persistResumePosition(includePlaybackPosition = false)
                     // Defer: synchronous start here calls speak() → stop() → cancel while the
                     // finished chunk's coroutine is still unwinding; its CancellationException handler
                     // could clear isPlaying and abort the next chunk mid-generate.
@@ -132,7 +164,8 @@ class ClipboardMonitorService : Service() {
                     mainHandler.post(playNextChunkRunnable)
                 } else {
                     isMaxChunkMode = false  // auto-reset at end of document
-                    persistResumePosition()
+                    persistResumePosition(includePlaybackPosition = false)
+                    mainHandler.removeCallbacks(progressPersistRunnable)
                     updateMediaSession()
                     updateNotification()
                     ttsListener?.onPlaybackFinished()
@@ -143,12 +176,17 @@ class ClipboardMonitorService : Service() {
                 Log.e("PasteItService", "TTS error: $utteranceId - $error")
                 isPlaying = false
                 isPaused = false
+                syntheticUtteranceStartRealtimeMs = 0L
+                mainHandler.removeCallbacks(progressPersistRunnable)
                 updateMediaSession()
                 updateNotification()
                 ttsListener?.onPlaybackError()
             }
 
             override fun onEngineReconfigured() {
+                // Android TTS applyPreferences() always runs (even when xAI is playing). Ignore
+                // that callback for playback flags so ExoPlayer state stays in sync with isPlaying.
+                if (ttsEngine?.isXaiEngineActive() == true) return
                 isPlaying = false
                 isPaused = false
             }
@@ -181,10 +219,6 @@ class ClipboardMonitorService : Service() {
     }
 
     private fun checkClipboardContent() {
-        if (activeContentSource == ActiveContentSource.LIBRARY) {
-            Log.d("PasteItService", "Ignoring clipboard change while library item is active")
-            return
-        }
         try {
             val clip = clipboardManager.primaryClip
             if (clip != null && clip.itemCount > 0) {
@@ -194,6 +228,11 @@ class ClipboardMonitorService : Service() {
                 // Process any non-empty text, even if it's the same as before
                 // (user might want to re-read the same content)
                 if (clipText.isNotEmpty()) {
+                    // While a library item is open, only ignore clipboard updates that duplicate the
+                    // current document — otherwise copying new text must switch to a session load.
+                    if (activeContentSource == ActiveContentSource.LIBRARY && clipText == lastSourceForDisplay) {
+                        return
+                    }
                     // Only skip if it's exactly the same and very recent (within 1 second)
                     val currentTime = System.currentTimeMillis()
                     val timeDiff = currentTime - lastClipboardChangeTime
@@ -280,9 +319,16 @@ class ClipboardMonitorService : Service() {
         activeSavedItemId = savedItemId
         activeContentSource = nextContentSource
         isMaxChunkMode = false  // always reset to standard mode on new text
+        // Keep clipboard debounce aligned with the active document (paste, library load, etc.).
+        lastClipboardText = text
+        lastClipboardChangeTime = System.currentTimeMillis()
 
-        // Detect playable single-file MP3 for library items (merged export preferred).
-        activeMergedFile = savedItemId?.let { id -> SavedContentStore.findPlayableAudioFile(this, id) }
+        // Only use the stitched merged.mp3 for single-file playback — never individual chunk files.
+        // Chunk files are audio fragments, not full-document audio; routing them here collapses
+        // the chunk list to 1 and breaks chunk-level resume for non-merged items.
+        activeMergedFile = savedItemId?.let { id ->
+            PasteItStoragePaths.mergedMp3File(this, id).takeIf { it.exists() }
+        }
 
         CurrentTextPersistence.save(
             this,
@@ -295,11 +341,14 @@ class ClipboardMonitorService : Service() {
         currentText = SpeechFormattingPipeline.plainTextForTts(preferences, text)
         // When a merged file is available, treat the whole document as one chunk so the seekbar
         // maps directly to real audio position within the single file.
-        textChunks = if (activeMergedFile != null) listOf(currentText) else splitTextIntoChunks(currentText)
+        applyChunks(
+            if (activeMergedFile != null) listOf(currentText) else splitTextIntoChunks(currentText),
+        )
         refreshAverageChunkDurationEstimate()
-        currentPosition = restoreResumePosition().coerceIn(0, (textChunks.size - 1).coerceAtLeast(0))
-        persistResumePosition()
-        if (currentPosition > 0) {
+        val restored = restoreResumeState()
+        currentPosition = restored.chunkIndex.coerceIn(0, (textChunks.size - 1).coerceAtLeast(0))
+        pendingResumeSeekMs = restored.chunkPositionMs
+        if (currentPosition > 0 || pendingResumeSeekMs > 0L) {
             pendingResumeHint = Pair(currentPosition + 1, textChunks.size)
         }
 
@@ -327,6 +376,40 @@ class ClipboardMonitorService : Service() {
     }
 
     /**
+     * Updates [textChunks] and rebuilds [chunkDocumentRanges] so downstream code always sees
+     * the two in lockstep. Ranges are derived by locating each chunk inside [currentText]; the
+     * merged-file single-chunk path collapses to `[0, currentText.length)` automatically.
+     */
+    private fun applyChunks(chunks: List<String>) {
+        textChunks = chunks
+        chunkDocumentRanges = computeChunkDocumentRanges(currentText, chunks)
+    }
+
+    private fun computeChunkDocumentRanges(text: String, chunks: List<String>): List<IntRange> {
+        if (chunks.isEmpty()) return emptyList()
+        val ranges = ArrayList<IntRange>(chunks.size)
+        var cursor = 0
+        for (chunk in chunks) {
+            if (chunk.isEmpty()) {
+                ranges += cursor until cursor
+                continue
+            }
+            val idx = text.indexOf(chunk, cursor)
+            if (idx < 0) {
+                val start = cursor.coerceAtMost(text.length)
+                val end = (start + chunk.length).coerceAtMost(text.length)
+                ranges += start until end
+                cursor = end
+            } else {
+                val end = idx + chunk.length
+                ranges += idx until end
+                cursor = end
+            }
+        }
+        return ranges
+    }
+
+    /**
      * Rebuilds [currentText] from [lastSourceForDisplay] using current formatting prefs (e.g. stock rules).
      * No-ops when the result matches [currentText] so [MainActivity.onResume] does not interrupt playback.
      */
@@ -338,10 +421,13 @@ class ClipboardMonitorService : Service() {
         if (isPlaying) stopPlayback()
         ttsEngine?.resetChunkCrossfade()
         currentText = next
-        textChunks = splitTextIntoChunks(currentText)
+        applyChunks(splitTextIntoChunks(currentText))
         refreshAverageChunkDurationEstimate()
         currentPosition = currentPosition.coerceIn(0, (textChunks.size - 1).coerceAtLeast(0))
-        persistResumePosition()
+        persistResumePosition(
+            includePlaybackPosition = false,
+            explicitChunkPositionMs = pendingResumeSeekMs.takeIf { it > 0L },
+        )
     }
 
     fun updateTTSSettings(speechRate: Float, speechPitch: Float) {
@@ -349,12 +435,15 @@ class ClipboardMonitorService : Service() {
         ttsEngine?.applyPreferences(preferences, speechRateFromUi = speechRate, onComplete = null)
         // Re-split so chunk-size preference applies to text already loaded
         if (currentText.isNotEmpty()) {
-            textChunks = splitTextIntoChunks(currentText)
+            applyChunks(splitTextIntoChunks(currentText))
             refreshAverageChunkDurationEstimate()
             if (currentPosition >= textChunks.size) {
                 currentPosition = (textChunks.size - 1).coerceAtLeast(0)
             }
-            persistResumePosition()
+            persistResumePosition(
+                includePlaybackPosition = isPlaying || isPaused,
+                explicitChunkPositionMs = pendingResumeSeekMs.takeIf { it > 0L },
+            )
         }
     }
 
@@ -402,10 +491,12 @@ class ClipboardMonitorService : Service() {
 
     private fun stopPlayback() {
         mainHandler.removeCallbacks(playNextChunkRunnable)
+        mainHandler.removeCallbacks(progressPersistRunnable)
         Log.d("PasteItService", "Stopping playback")
         ttsEngine?.stop()
         isPlaying = false
         isPaused = false
+        syntheticUtteranceStartRealtimeMs = 0L
     }
 
     private fun pausePlayback() {
@@ -413,6 +504,7 @@ class ClipboardMonitorService : Service() {
         if (ttsEngine?.pause() == true) {
             isPlaying = false
             isPaused = true
+            persistResumePosition(includePlaybackPosition = true)
             updateMediaSession()
             updateNotification()
             ttsListener?.onPlaybackPaused()
@@ -450,7 +542,7 @@ class ClipboardMonitorService : Service() {
         stopPlayback()
         if (currentPosition > 0) currentPosition--
         if (wasPlaying) startPlayback() else { updateMediaSession(); updateNotification() }
-        persistResumePosition()
+        persistResumePosition(includePlaybackPosition = false)
     }
 
     fun fastForward() {
@@ -469,7 +561,7 @@ class ClipboardMonitorService : Service() {
         stopPlayback()
         if (currentPosition < textChunks.size - 1) currentPosition++
         if (wasPlaying) startPlayback() else { updateMediaSession(); updateNotification() }
-        persistResumePosition()
+        persistResumePosition(includePlaybackPosition = false)
     }
 
     fun seekToChunk(index: Int) {
@@ -479,12 +571,174 @@ class ClipboardMonitorService : Service() {
         val wasPlaying = isPlaying || isPaused
         stopPlayback()
         currentPosition = target
-        persistResumePosition()
+        pendingResumeSeekMs = 0L
+        persistResumePosition(includePlaybackPosition = false)
         if (wasPlaying) startPlayback() else { updateMediaSession(); updateNotification() }
     }
 
-    fun getCurrentChunkPositionMs(): Long = ttsEngine?.getCurrentPositionMs() ?: 0L
-    fun getCurrentChunkDurationMs(): Long = ttsEngine?.getDurationMs() ?: 0L
+    fun seekToProgress(progress: Int, resolutionPerChunk: Int) {
+        if (textChunks.isEmpty() || resolutionPerChunk <= 0) return
+
+        val maxProgress = (textChunks.size * resolutionPerChunk).coerceAtLeast(resolutionPerChunk)
+        val bounded = progress.coerceIn(0, maxProgress)
+        val targetChunk = (bounded / resolutionPerChunk).coerceIn(0, textChunks.size - 1)
+        val withinUnits = (bounded % resolutionPerChunk).coerceIn(0, resolutionPerChunk - 1)
+        val withinFraction = withinUnits.toFloat() / resolutionPerChunk.toFloat()
+
+        val targetDuration = estimateChunkDurationMs(targetChunk)
+        val targetSeekMs = (targetDuration * withinFraction).toLong().coerceAtLeast(0L)
+
+        val wasPlaying = isPlaying || isPaused
+        stopPlayback()
+        currentPosition = targetChunk
+        pendingResumeSeekMs = targetSeekMs
+        persistResumePosition(includePlaybackPosition = false, explicitChunkPositionMs = targetSeekMs)
+        if (wasPlaying) startPlayback() else { updateMediaSession(); updateNotification() }
+    }
+
+    fun getCurrentChunkPositionMs(): Long = effectiveChunkPositionMs()
+    fun getCurrentChunkDurationMs(): Long = effectiveChunkDurationMs()
+    fun getCurrentChunkText(): String =
+        textChunks.getOrNull(currentPosition).orEmpty()
+
+    /**
+     * Returns a character range in [getCurrentChunkText] that approximates what the TTS engine
+     * is currently reading. Uses the [PlaybackReadingEstimator] schedule cached for the active
+     * chunk; returns [IntRange.EMPTY] when no chunk is active or timing is unavailable.
+     */
+    fun getEstimatedReadingRangeInChunk(
+        marginChars: Int = PlaybackReadingEstimator.DEFAULT_MARGIN_CHARS,
+    ): IntRange {
+        val chunkText = textChunks.getOrNull(currentPosition).orEmpty()
+        if (chunkText.isEmpty()) return IntRange.EMPTY
+        val schedule = ensureReadingScheduleFor(chunkText)
+        val durationMs = effectiveChunkDurationMs()
+        val positionMs = positionMsForReadingEstimate()
+        return PlaybackReadingEstimator.rangeForTime(schedule, positionMs, durationMs, marginChars)
+    }
+
+    /** TTS-aligned plain text; this is the exact string the reader should display. */
+    fun getPlaybackPlainText(): String = currentText
+
+    /**
+     * Maps [getEstimatedReadingRangeInChunk] into [currentText] coordinates so the reader can
+     * highlight across chunk boundaries. Returns [IntRange.EMPTY] when no chunk is active.
+     */
+    fun getEstimatedReadingRangeInDocument(
+        marginChars: Int = PlaybackReadingEstimator.DEFAULT_MARGIN_CHARS,
+    ): IntRange {
+        val chunkRange = chunkDocumentRanges.getOrNull(currentPosition) ?: return IntRange.EMPTY
+        if (chunkRange.isEmpty()) return IntRange.EMPTY
+        val inChunk = getEstimatedReadingRangeInChunk(marginChars)
+        if (inChunk.isEmpty()) return IntRange.EMPTY
+        val start = (chunkRange.first + inChunk.first).coerceIn(chunkRange.first, chunkRange.last)
+        val endInclusive = (chunkRange.first + inChunk.last).coerceIn(chunkRange.first, chunkRange.last)
+        return if (endInclusive < start) IntRange.EMPTY else start..endInclusive
+    }
+
+    /** The document range of the chunk currently being spoken, or [IntRange.EMPTY]. */
+    fun getCurrentChunkDocumentRange(): IntRange =
+        chunkDocumentRanges.getOrNull(currentPosition) ?: IntRange.EMPTY
+
+    /**
+     * Seeks playback to the chunk containing [offset] in [currentText], with an in-chunk
+     * position approximated from the character fraction. Mirrors [seekToProgress] semantics.
+     */
+    fun seekToDocumentPlainOffset(offset: Int) {
+        if (chunkDocumentRanges.isEmpty() || currentText.isEmpty()) return
+        val clamped = offset.coerceIn(0, currentText.length)
+        val targetChunk = chunkDocumentRanges.indexOfFirst { clamped < it.last + 1 }
+            .let { if (it < 0) chunkDocumentRanges.lastIndex else it }
+        val range = chunkDocumentRanges[targetChunk]
+        val chunkLength = (range.last + 1 - range.first).coerceAtLeast(1)
+        val withinChars = (clamped - range.first).coerceIn(0, chunkLength)
+        val fraction = withinChars.toFloat() / chunkLength.toFloat()
+        val duration = estimateChunkDurationMs(targetChunk).takeIf { it > 0L }
+            ?: fallbackChunkDurationMs(targetChunk)
+        val seekMs = (duration * fraction).toLong().coerceAtLeast(0L)
+
+        val wasPlaying = isPlaying || isPaused
+        stopPlayback()
+        currentPosition = targetChunk.coerceIn(0, (textChunks.size - 1).coerceAtLeast(0))
+        pendingResumeSeekMs = seekMs
+        invalidateReadingSchedule()
+        persistResumePosition(includePlaybackPosition = false, explicitChunkPositionMs = seekMs)
+        if (wasPlaying) startPlayback() else { updateMediaSession(); updateNotification() }
+    }
+
+    private fun effectiveChunkPositionMs(): Long {
+        val engine = ttsEngine
+        if (engine?.isSeekable() == true) {
+            return engine.getCurrentPositionMs().coerceAtLeast(0L)
+        }
+        if (isPlaying && syntheticUtteranceStartRealtimeMs > 0L) {
+            val raw = SystemClock.elapsedRealtime() - syntheticUtteranceStartRealtimeMs
+            val ceiling = effectiveChunkDurationMs()
+            return if (ceiling > 0L) raw.coerceIn(0L, ceiling) else raw.coerceAtLeast(0L)
+        }
+        return pendingResumeSeekMs.coerceAtLeast(0L)
+    }
+
+    /**
+     * Position used only for follow-along highlighting. Lags [effectiveChunkPositionMs] by
+     * [READING_ESTIMATE_START_LAG_MS] so the band does not run ahead at chunk start (TTS often
+     * begins audibly after callbacks / ExoPlayer reports 0 ms).
+     */
+    private fun positionMsForReadingEstimate(): Long {
+        val raw = effectiveChunkPositionMs()
+        return (raw - READING_ESTIMATE_START_LAG_MS).coerceAtLeast(0L)
+    }
+
+    private fun effectiveChunkDurationMs(): Long {
+        val engine = ttsEngine
+        if (engine?.isSeekable() == true) {
+            val live = engine.getDurationMs()
+            if (live > 0L) return live
+        }
+        val cached = estimateChunkDurationMs(currentPosition)
+        if (cached > 0L) return cached
+        return fallbackChunkDurationMs(currentPosition)
+    }
+
+    /**
+     * Character-based duration estimate used when neither ExoPlayer nor a cached audio file can
+     * provide a real duration. Calibrated loosely against typical Android TTS output at the
+     * user's preferred speech rate (~15 chars/sec at 1.0x).
+     */
+    private fun fallbackChunkDurationMs(chunkIndex: Int): Long {
+        val chunk = textChunks.getOrNull(chunkIndex) ?: return 0L
+        if (chunk.isEmpty()) return 0L
+        val ratePercent = preferences.getInt(
+            AndroidTtsEngineParams.PREF_SPEECH_RATE,
+            AndroidTtsEngineParams.DEFAULT_SPEECH_RATE_PERCENT,
+        )
+        val rate = (ratePercent / 100f).coerceIn(0.25f, 4.0f)
+        val charsPerSec = (15.0f * rate).coerceAtLeast(3.0f)
+        return ((chunk.length / charsPerSec) * 1000f).toLong().coerceAtLeast(0L)
+    }
+
+    private fun ensureReadingSchedule() {
+        val chunkText = textChunks.getOrNull(currentPosition).orEmpty()
+        if (chunkText.isEmpty()) {
+            invalidateReadingSchedule()
+            return
+        }
+        ensureReadingScheduleFor(chunkText)
+    }
+
+    private fun ensureReadingScheduleFor(chunkText: String): ReadingSchedule {
+        val cached = currentChunkSchedule
+        if (cached != null && scheduleSourceChunk == chunkText) return cached
+        val built = PlaybackReadingEstimator.buildSchedule(chunkText)
+        currentChunkSchedule = built
+        scheduleSourceChunk = chunkText
+        return built
+    }
+
+    private fun invalidateReadingSchedule() {
+        currentChunkSchedule = null
+        scheduleSourceChunk = ""
+    }
 
     fun setMaxChunkMode(enabled: Boolean) {
         if (isMaxChunkMode == enabled) return
@@ -493,10 +747,10 @@ class ClipboardMonitorService : Service() {
             val wasPlaying = isPlaying || isPaused
             stopPlayback()
             ttsEngine?.resetChunkCrossfade()
-            textChunks = splitTextIntoChunks(currentText)
+            applyChunks(splitTextIntoChunks(currentText))
             refreshAverageChunkDurationEstimate()
             currentPosition = currentPosition.coerceIn(0, (textChunks.size - 1).coerceAtLeast(0))
-            persistResumePosition()
+            persistResumePosition(includePlaybackPosition = false)
             if (wasPlaying) startPlayback()
         }
     }
@@ -521,7 +775,7 @@ class ClipboardMonitorService : Service() {
             updateMediaSession()
             updateNotification()
         }
-        persistResumePosition()
+        persistResumePosition(includePlaybackPosition = false)
     }
 
     fun setManualText(text: String) {
@@ -537,7 +791,7 @@ class ClipboardMonitorService : Service() {
     fun getCurrentSourceText(): String = lastSourceForDisplay
     fun getActiveSavedItemId(): String? = activeSavedItemId
     fun isLibraryItemActive(): Boolean = activeContentSource == ActiveContentSource.LIBRARY
-    fun isMergedMp3Active(): Boolean = activeMergedFile?.exists() == true
+
     fun isPlayingNow(): Boolean = isPlaying
     fun isPausedNow(): Boolean = isPaused
     fun getCurrentChunkIndex(): Int = currentPosition
@@ -570,23 +824,74 @@ class ClipboardMonitorService : Service() {
         ttsListener = listener
     }
 
-    private fun restoreResumePosition(): Int {
-        val source = lastSourceForDisplay.ifBlank { return 0 }
+    private fun restoreResumeState(): PlaybackResumeStore.ResumeState {
+        val source = lastSourceForDisplay.ifBlank {
+            return PlaybackResumeStore.ResumeState(
+                sourceHash = "",
+                chunkIndex = 0,
+                chunkPositionMs = 0L,
+            )
+        }
         return PlaybackResumeStore.load(
             context = this,
             sourceText = source,
             savedItemId = activeSavedItemId,
-        )?.chunkIndex ?: 0
+        ) ?: PlaybackResumeStore.ResumeState(
+            sourceHash = SavedContentStore.hashKeyMaterial(source),
+            chunkIndex = 0,
+            chunkPositionMs = 0L,
+        )
     }
 
-    private fun persistResumePosition() {
+    private fun persistResumePosition(
+        includePlaybackPosition: Boolean = false,
+        explicitChunkPositionMs: Long? = null,
+    ) {
         val source = lastSourceForDisplay.ifBlank { return }
+        val chunkPositionMs =
+            when {
+                explicitChunkPositionMs != null -> explicitChunkPositionMs.coerceAtLeast(0L)
+                includePlaybackPosition -> {
+                    val livePosition = (ttsEngine?.getCurrentPositionMs() ?: 0L).coerceAtLeast(0L)
+                    if (livePosition > 0L) {
+                        livePosition
+                    } else {
+                        pendingResumeSeekMs.coerceAtLeast(0L)
+                    }
+                }
+                else -> 0L
+            }
         PlaybackResumeStore.save(
             context = this,
             sourceText = source,
             savedItemId = activeSavedItemId,
             chunkIndex = currentPosition,
+            chunkPositionMs = chunkPositionMs,
         )
+    }
+
+    private fun estimateChunkDurationMs(chunkIndex: Int): Long {
+        if (chunkIndex !in textChunks.indices) return 0L
+        val savedItemId = activeSavedItemId
+        if (activeMergedFile != null) {
+            val duration = ttsEngine?.getDurationMs()?.takeIf { it > 0L }
+                ?: activeMergedFile?.let { readDurationMs(it) } ?: 0L
+            return duration
+        }
+        if (savedItemId == null) return averageChunkDurationMs
+        val voice = XaiVoiceOption.fromPreferences(preferences)
+        val keyMaterial = listOf(
+            "provider=xai",
+            "voice=${voice.prefValue}",
+            "language=en",
+            "codec=mp3",
+            "sample_rate=44100",
+            "bit_rate=128000",
+            "text=${textChunks[chunkIndex]}",
+        ).joinToString("|")
+        val file = SavedContentStore.audioCacheFile(this, savedItemId, keyMaterial)
+        val exact = if (file.exists()) readDurationMs(file) else 0L
+        return if (exact > 0L) exact else averageChunkDurationMs
     }
 
     private fun refreshAverageChunkDurationEstimate() {
@@ -756,6 +1061,11 @@ class ClipboardMonitorService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         Log.d("PasteItService", "Service destroyed")
+        persistResumePosition(
+            includePlaybackPosition = true,
+            explicitChunkPositionMs = pendingResumeSeekMs.takeIf { it > 0L },
+        )
+        mainHandler.removeCallbacks(progressPersistRunnable)
         ttsEngine?.release()
         mediaSession.isActive = false
         mediaSession.release()
@@ -764,6 +1074,9 @@ class ClipboardMonitorService : Service() {
     companion object {
         private const val NOTIFICATION_ID = 1
         private const val SEEK_STEP_MS = 15_000L
+        /** Shifts the reading band slightly late vs raw playback time (see [positionMsForReadingEstimate]). */
+        private const val READING_ESTIMATE_START_LAG_MS = 300L
+        private const val RESUME_PERSIST_INTERVAL_MS = 2_000L
         private const val CHANNEL_ID = "PasteItService"
         const val ACTION_TOGGLE_PLAYBACK = "com.example.pasteit.action.TOGGLE_PLAYBACK"
         const val ACTION_PASTE_CLIPBOARD = "com.example.pasteit.action.PASTE_CLIPBOARD"
