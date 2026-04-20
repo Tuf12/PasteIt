@@ -20,7 +20,8 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -43,8 +44,9 @@ dependencies {
     implementation(libs.material)
     implementation(libs.commonmark)
     implementation(libs.kotlinx.coroutines.android)
+    implementation(libs.androidx.security.crypto)
     implementation("androidx.media3:media3-exoplayer:1.4.1")
-    implementation("androidx.media:media:1.7.0")
+    implementation(libs.androidx.media)
     implementation("io.github.maxrave-dev:ffmpeg-kit-audio:6.0.1")
     implementation("com.mpatric:mp3agic:0.9.1")
     testImplementation(libs.junit)

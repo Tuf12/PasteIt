@@ -5,17 +5,31 @@
 # For more details, see
 #   http://developer.android.com/guide/developing/tools/proguard.html
 
-# If your project uses WebView with JS, uncomment the following
-# and specify the fully qualified class name to the JavaScript interface
-# class:
-#-keepclassmembers class fqcn.of.javascript.interface.for.webview {
-#   public *;
-#}
-
 # Uncomment this to preserve the line number information for
 # debugging stack traces.
-#-keepattributes SourceFile,LineNumberTable
+-keepattributes SourceFile,LineNumberTable
+-renamesourcefileattribute SourceFile
 
-# If you keep the line number information, uncomment this to
-# hide the original source file name.
-#-renamesourcefileattribute SourceFile
+# Kotlin
+-dontwarn kotlin.**
+-keepclassmembers class **$WhenMappings {
+    <fields>;
+}
+
+# Media3 / ExoPlayer
+-keep class androidx.media3.** { *; }
+-keep interface androidx.media3.** { *; }
+-dontwarn androidx.media3.**
+
+# FFmpeg Kit (JNI)
+-keep class com.arthenica.** { *; }
+-dontwarn com.arthenica.**
+
+# mp3agic
+-keep class com.mpatric.mp3agic.** { *; }
+
+# AndroidX Security Crypto (MasterKey / EncryptedSharedPreferences)
+-keep class androidx.security.crypto.** { *; }
+
+# CommonMark / autolink (if used reflectively)
+-keep class org.commonmark.** { *; }

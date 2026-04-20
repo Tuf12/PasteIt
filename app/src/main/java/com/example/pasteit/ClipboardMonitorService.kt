@@ -42,6 +42,9 @@ class ClipboardMonitorService : Service() {
     /** Non-null when the active library item has a stitched merged.mp3 ready for continuous playback. */
     private var activeMergedFile: java.io.File? = null
 
+    /** Notification / media session title: app name, or library item title when applicable (never body text). */
+    private var notificationContentTitle: String? = null
+
     private var clipboardListener: ((String) -> Unit)? = null
     private var ttsListener: TTSListener? = null
     private lateinit var preferences: SharedPreferences
@@ -95,9 +98,9 @@ class ClipboardMonitorService : Service() {
         clipboardManager = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
 
         initializeTts()
+        createNotificationChannel()
         restoreInitialTextState()
         setupClipboardListener()
-        createNotificationChannel()
         startForeground(NOTIFICATION_ID, createNotification())
     }
 
@@ -210,7 +213,7 @@ class ClipboardMonitorService : Service() {
         if (persisted != null) {
             activeSavedItemId = persisted.savedItemId
             activeContentSource = persisted.contentSource
-            Log.d("PasteItService", "Restoring persisted text: ${persisted.sourceText.take(50)}...")
+            Log.d("PasteItService", "Restoring persisted text")
             loadSourceTextIntoState(persisted.sourceText, savedItemId = persisted.savedItemId)
             return
         }
@@ -223,7 +226,7 @@ class ClipboardMonitorService : Service() {
             val clip = clipboardManager.primaryClip
             if (clip != null && clip.itemCount > 0) {
                 val clipText = clip.getItemAt(0).text?.toString() ?: ""
-                Log.d("PasteItService", "Clipboard text: ${clipText.take(50)}...")
+                Log.d("PasteItService", "Clipboard text updated")
 
                 // Process any non-empty text, even if it's the same as before
                 // (user might want to re-read the same content)
@@ -242,7 +245,7 @@ class ClipboardMonitorService : Service() {
                         lastClipboardChangeTime = currentTime
                         loadSourceTextIntoState(clipText)
                     }
-                }
+                } 
             }
         } catch (e: Exception) {
             Log.e("PasteItService", "Error reading clipboard", e)
@@ -268,7 +271,7 @@ class ClipboardMonitorService : Service() {
     private fun loadTextDirectly(text: String?) {
         val directText = text?.trim().orEmpty()
         if (directText.isBlank()) return
-        Log.d("PasteItService", "Direct process-text load: ${directText.take(50)}...")
+        Log.d("PasteItService", "Direct process-text load")
         loadSourceTextIntoState(directText)
     }
 
@@ -277,24 +280,38 @@ class ClipboardMonitorService : Service() {
         val document = store.load(savedItemId) ?: return false
 
         if (document.sourceText.isNotBlank()) {
-            loadSourceTextIntoState(document.sourceText, savedItemId = savedItemId)
+            loadSourceTextIntoState(
+                document.sourceText,
+                savedItemId = savedItemId,
+                libraryDisplayTitle = document.item.title,
+            )
             return true
         }
 
         val playable = SavedContentStore.findPlayableAudioFile(this, savedItemId) ?: return false
         val label = "Audio file available: ${playable.name}"
-        loadSourceTextIntoState(label, savedItemId = savedItemId)
+        loadSourceTextIntoState(
+            label,
+            savedItemId = savedItemId,
+            libraryDisplayTitle = document.item.title,
+        )
         return true
     }
 
-    private fun loadSourceTextIntoState(text: String, savedItemId: String? = null) {
+    private fun loadSourceTextIntoState(
+        text: String,
+        savedItemId: String? = null,
+        libraryDisplayTitle: String? = null,
+    ) {
         val previousSourceText = lastSourceForDisplay
         val previousSavedItemId = activeSavedItemId
         val nextContentSource =
             if (savedItemId != null) ActiveContentSource.LIBRARY else ActiveContentSource.STANDARD
 
         mainHandler.removeCallbacks(playNextChunkRunnable)
-        if (isPlaying) {
+        // Always tear down active/paused engine state before swapping source text.
+        // Otherwise a paused library ExoPlayer session can resume after we load new clipboard text.
+        if (isPlaying || isPaused) {
             stopPlayback()
         }
         ttsEngine?.resetChunkCrossfade()
@@ -318,6 +335,7 @@ class ClipboardMonitorService : Service() {
         lastSourceForDisplay = text
         activeSavedItemId = savedItemId
         activeContentSource = nextContentSource
+        notificationContentTitle = resolveNotificationTitle(savedItemId, libraryDisplayTitle)
         isMaxChunkMode = false  // always reset to standard mode on new text
         // Keep clipboard debounce aligned with the active document (paste, library load, etc.).
         lastClipboardText = text
@@ -354,12 +372,16 @@ class ClipboardMonitorService : Service() {
 
         clipboardListener?.invoke(text)
         Log.d("PasteItService", "Text loaded, chunks: ${textChunks.size}")
+
+        // Media session was initialized before restore; keep metadata in sync with [notificationContentTitle].
+        updateMediaSession()
+        updateNotification()
     }
 
     private fun splitTextIntoChunks(text: String): List<String> {
         if (isMaxChunkMode) {
             // Bypass the manifest so the larger chunks don't overwrite the standard chunk split.
-            val maxChars = if (TextChunkingPreferences.shouldUseCloudChunking(preferences)) {
+            val maxChars = if (TextChunkingPreferences.shouldUseCloudChunking(this, preferences)) {
                 TextChunkingPreferences.MAX_CLOUD_CHUNK_MAX_CHARS
             } else {
                 AndroidTtsEngineParams.MAX_CHUNK_MAX_CHARS
@@ -371,7 +393,7 @@ class ClipboardMonitorService : Service() {
             sourceText = text,
             savedItemId = activeSavedItemId,
         ) {
-            TextChunker.splitText(text, TextChunkingPreferences.activeChunkMax(preferences))
+            TextChunker.splitText(text, TextChunkingPreferences.activeChunkMax(this, preferences))
         }
     }
 
@@ -448,7 +470,7 @@ class ClipboardMonitorService : Service() {
     }
 
     fun togglePlayback() {
-        Log.d("PasteItService", "Toggle playback - currentText: ${currentText.take(50)}..., isPlaying: $isPlaying, ttsInitialized: $ttsInitialized")
+        Log.d("PasteItService", "Toggle playback (isPlaying=$isPlaying, ttsInitialized=$ttsInitialized)")
 
         if (currentText.isEmpty() && activeMergedFile == null) {
             Log.w("PasteItService", "No text to play")
@@ -480,7 +502,7 @@ class ClipboardMonitorService : Service() {
                 val textToSpeak = textChunks[currentPosition]
                 val prefetchNext =
                     if (currentPosition + 1 < textChunks.size) textChunks[currentPosition + 1] else null
-                Log.d("PasteItService", "Speaking chunk $currentPosition: ${textToSpeak.take(50)}...")
+                Log.d("PasteItService", "Speaking chunk $currentPosition of ${textChunks.size}")
                 ttsListener?.onPlaybackBuffering()
                 ttsEngine?.speak(textToSpeak, "pasteit_$currentPosition", prefetchNext)
             }
@@ -636,10 +658,6 @@ class ClipboardMonitorService : Service() {
         return if (endInclusive < start) IntRange.EMPTY else start..endInclusive
     }
 
-    /** The document range of the chunk currently being spoken, or [IntRange.EMPTY]. */
-    fun getCurrentChunkDocumentRange(): IntRange =
-        chunkDocumentRanges.getOrNull(currentPosition) ?: IntRange.EMPTY
-
     /**
      * Seeks playback to the chunk containing [offset] in [currentText], with an in-chunk
      * position approximated from the character fraction. Mirrors [seekToProgress] semantics.
@@ -647,8 +665,9 @@ class ClipboardMonitorService : Service() {
     fun seekToDocumentPlainOffset(offset: Int) {
         if (chunkDocumentRanges.isEmpty() || currentText.isEmpty()) return
         val clamped = offset.coerceIn(0, currentText.length)
-        val targetChunk = chunkDocumentRanges.indexOfFirst { clamped < it.last + 1 }
-            .let { if (it < 0) chunkDocumentRanges.lastIndex else it }
+        val targetChunk = chunkDocumentRanges
+            .indexOfFirst { range: IntRange -> clamped < range.last + 1 }
+            .let { idx: Int -> if (idx < 0) chunkDocumentRanges.lastIndex else idx }
         val range = chunkDocumentRanges[targetChunk]
         val chunkLength = (range.last + 1 - range.first).coerceAtLeast(1)
         val withinChars = (clamped - range.first).coerceIn(0, chunkLength)
@@ -779,16 +798,21 @@ class ClipboardMonitorService : Service() {
     }
 
     fun setManualText(text: String) {
-        Log.d("PasteItService", "Manual text set: ${text.take(50)}...")
+        Log.d("PasteItService", "Manual text set")
         loadSourceTextIntoState(text)
     }
 
     fun setSavedText(text: String, savedItemId: String) {
-        Log.d("PasteItService", "Saved text loaded: ${text.take(50)}... ($savedItemId)")
-        loadSourceTextIntoState(text, savedItemId = savedItemId)
+        Log.d("PasteItService", "Saved text loaded (savedItemId=$savedItemId)")
+        val title = SavedContentStore(this).load(savedItemId)?.item?.title
+        loadSourceTextIntoState(text, savedItemId = savedItemId, libraryDisplayTitle = title)
     }
 
     fun getCurrentSourceText(): String = lastSourceForDisplay
+
+    /** In-app / PiP header: app name for non-library content, or the saved library title (never body text). */
+    fun getNowPlayingDisplayTitle(): String =
+        notificationContentTitle ?: getString(R.string.app_name)
     fun getActiveSavedItemId(): String? = activeSavedItemId
     fun isLibraryItemActive(): Boolean = activeContentSource == ActiveContentSource.LIBRARY
 
@@ -939,16 +963,31 @@ class ClipboardMonitorService : Service() {
     }
 
     private fun initializeMediaSession() {
-        mediaSession = MediaSessionCompat(this, "PasteItSession").apply {
-            setCallback(object : MediaSessionCompat.Callback() {
-                override fun onPlay() { togglePlayback() }
-                override fun onPause() { togglePlayback() }
-                override fun onSkipToNext() { fastForward() }
-                override fun onSkipToPrevious() { rewind() }
-                override fun onStop() { stopPlayback() }
-            })
-            isActive = true
+        val callback: MediaSessionCompat.Callback = object : MediaSessionCompat.Callback() {
+            override fun onPlay() {
+                togglePlayback()
+            }
+
+            override fun onPause() {
+                togglePlayback()
+            }
+
+            override fun onSkipToNext() {
+                fastForward()
+            }
+
+            override fun onSkipToPrevious() {
+                rewind()
+            }
+
+            override fun onStop() {
+                stopPlayback()
+            }
         }
+        val session = MediaSessionCompat(this, "PasteItSession")
+        session.setCallback(callback)
+        session.isActive = true
+        mediaSession = session
         updateMediaSession()
     }
 
@@ -970,21 +1009,27 @@ class ClipboardMonitorService : Service() {
                 .setActions(actions)
                 .build()
         )
-        val title = lastSourceForDisplay
-            .lineSequence()
-            .firstOrNull { it.isNotBlank() }
-            ?.trim()
-            ?.take(80)
-            ?: "PasteIt"
+        val title = notificationContentTitle ?: getString(R.string.app_name)
         mediaSession.setMetadata(
             MediaMetadataCompat.Builder()
                 .putString(MediaMetadataCompat.METADATA_KEY_TITLE, title)
-                .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, "PasteIt")
+                // Leave artist empty — the system already shows the app name; "PasteIt" here duplicated it on the lock screen.
+                .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, "")
                 .putLong(MediaMetadataCompat.METADATA_KEY_TRACK_NUMBER, (currentPosition + 1).toLong())
                 .putLong(MediaMetadataCompat.METADATA_KEY_NUM_TRACKS, textChunks.size.toLong())
                 .build()
         )
     }
+
+    private fun resolveNotificationTitle(savedItemId: String?, libraryDisplayTitle: String?): String =
+        when {
+            savedItemId == null -> getString(R.string.app_name)
+            else -> {
+                libraryDisplayTitle?.trim()?.takeIf { it.isNotBlank() }
+                    ?: SavedContentStore(this).load(savedItemId)?.item?.title?.trim()?.takeIf { it.isNotBlank() }
+                    ?: getString(R.string.app_name)
+            }
+        }
 
     private fun createNotificationChannel() {
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
@@ -1020,12 +1065,7 @@ class ClipboardMonitorService : Service() {
         val toggleIcon = if (isPlaying) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play
         val toggleLabel = if (isPlaying) "Pause" else "Play"
 
-        val title = lastSourceForDisplay
-            .lineSequence()
-            .firstOrNull { it.isNotBlank() }
-            ?.trim()
-            ?.take(60)
-            ?: "PasteIt"
+        val title = notificationContentTitle ?: getString(R.string.app_name)
         val subtitle = when {
             isPlaying -> "Reading · chunk ${currentPosition + 1} of ${textChunks.size}"
             isPaused -> "Paused · chunk ${currentPosition + 1} of ${textChunks.size}"
@@ -1039,7 +1079,7 @@ class ClipboardMonitorService : Service() {
             .setContentIntent(openAppIntent)
             .setOngoing(true)
             .setShowWhen(false)
-            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
             .addAction(android.R.drawable.ic_media_rew, "Rewind", rewindPi)
             .addAction(toggleIcon, toggleLabel, togglePi)
             .addAction(android.R.drawable.ic_media_ff, "Forward", ffPi)

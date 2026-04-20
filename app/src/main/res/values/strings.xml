@@ -66,7 +66,7 @@
     <string name="xai_voice_hint_leo">Leo is available through xAI TTS for a different voice color while keeping the same fallback behavior.</string>
     <string name="xai_voice_hint_rex">Rex is available through xAI TTS for quick A/B voice testing in settings.</string>
     <string name="xai_voice_hint_sal">Sal is available through xAI TTS and can be switched live from settings.</string>
-    <string name="buffering_tts">Converting text to speech…</string>
+    <string name="buffering_tts">Preparing audio…\nPlayback will begin automatically when ready.</string>
     <string name="ready_to_read">Text is ready to read.</string>
     <string name="now_reading">Now Reading</string>
     <string name="text_view">Text View</string>
@@ -75,7 +75,7 @@
     <string name="player_idle_title">Paste something in and press play when you are ready.</string>
     <string name="player_status_playing">Reading Live</string>
     <string name="player_status_paused">Paused</string>
-    <string name="player_status_loading">Generating Audio</string>
+    <string name="player_status_loading">Preparing audio</string>
     <string name="player_status_ready">Ready</string>
     <string name="player_status_waiting">Waiting for Text</string>
     <string name="chunk_of_total">Chunk %1$d of %2$d</string>

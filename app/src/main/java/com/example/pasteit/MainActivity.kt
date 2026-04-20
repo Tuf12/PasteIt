@@ -1,7 +1,6 @@
 package com.example.pasteit
 
 import android.annotation.SuppressLint
-import android.app.Activity
 import android.app.PendingIntent
 import android.app.PictureInPictureParams
 import android.app.RemoteAction
@@ -37,9 +36,9 @@ import android.widget.SeekBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
-import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.content.ContextCompat
+import androidx.core.content.edit
 import java.text.NumberFormat
 import java.util.Locale
 
@@ -174,7 +173,7 @@ class MainActivity : BaseSwipeActivity() {
 
             clipboardService?.setClipboardListener { clipText ->
                 runOnUiThread {
-                    Log.d("PasteItMain", "Received clipboard text: ${clipText.take(50)}...")
+                    Log.d("PasteItMain", "Clipboard listener fired")
                     updateTextDisplay(clipText)
                     isSaved = clipboardService?.isLibraryItemActive() == true
                     refreshUi()
@@ -266,7 +265,7 @@ class MainActivity : BaseSwipeActivity() {
         // Pick up any item tapped in LibraryActivity, regardless of how it was launched.
         val pendingId = preferences.getString(LibraryActivity.PREF_PENDING_SELECTION, null)
         if (pendingId != null) {
-            preferences.edit().remove(LibraryActivity.PREF_PENDING_SELECTION).apply()
+            preferences.edit { remove(LibraryActivity.PREF_PENDING_SELECTION) }
             pendingLibrarySelectionId = pendingId
         }
         applyPendingLibrarySelection()
@@ -377,7 +376,7 @@ class MainActivity : BaseSwipeActivity() {
 
         stockFormatButton.setOnClickListener {
             val next = !preferences.getBoolean(SpeechFormattingPreferences.PREF_QUICK_STOCK, false)
-            preferences.edit().putBoolean(SpeechFormattingPreferences.PREF_QUICK_STOCK, next).apply()
+            preferences.edit { putBoolean(SpeechFormattingPreferences.PREF_QUICK_STOCK, next) }
             updateStockFormatButtonUi()
             clipboardService?.reapplySpeechFormatting()
             refreshUi()
@@ -424,7 +423,7 @@ class MainActivity : BaseSwipeActivity() {
         val isNight = (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
             android.content.res.Configuration.UI_MODE_NIGHT_YES
         val newMode = if (isNight) AppCompatDelegate.MODE_NIGHT_NO else AppCompatDelegate.MODE_NIGHT_YES
-        preferences.edit().putInt("theme_mode", newMode).apply()
+        preferences.edit { putInt("theme_mode", newMode) }
         AppCompatDelegate.setDefaultNightMode(newMode)
         // uiMode is in android:configChanges (needed for PiP), so setDefaultNightMode won't
         // trigger an automatic recreation — we must do it manually.
@@ -501,6 +500,13 @@ class MainActivity : BaseSwipeActivity() {
             .show()
     }
 
+    /**
+     * True while we are waiting on TTS/network, but not when the service has already entered
+     * the playing state (avoids spinner overlapping with audible playback if callbacks reorder).
+     */
+    private fun shouldShowBufferingUi(): Boolean =
+        isBuffering && clipboardService?.isPlayingNow() != true
+
     private fun updatePlayButtonState() {
         val hasText = clipboardService?.getCurrentSourceText().orEmpty().isNotBlank()
 
@@ -547,7 +553,7 @@ class MainActivity : BaseSwipeActivity() {
         )
 
         when {
-            isBuffering -> {
+            shouldShowBufferingUi() -> {
                 ttsProgressBar.visibility = View.VISIBLE
                 playbackStatusText.visibility = View.VISIBLE
                 playbackStatusText.text = getString(R.string.buffering_tts)
@@ -570,7 +576,7 @@ class MainActivity : BaseSwipeActivity() {
 
         val dotDrawable = statusDot.background.mutate() as? GradientDrawable
         val dotColor = when {
-            isBuffering -> ContextCompat.getColor(this, R.color.pasteit_accent)
+            shouldShowBufferingUi() -> ContextCompat.getColor(this, R.color.pasteit_accent)
             isPlayingNow -> ContextCompat.getColor(this, R.color.pasteit_success)
             hasText -> ContextCompat.getColor(this, R.color.pasteit_text_dim)
             else -> ContextCompat.getColor(this, R.color.pasteit_text_soft)
@@ -610,7 +616,11 @@ class MainActivity : BaseSwipeActivity() {
         val chunkIndex0 = clipboardService?.getCurrentChunkIndex() ?: 0  // 0-based
         val totalChunks = clipboardService?.getTotalChunkCount() ?: 0
 
-        nowPlayingTitle.text = if (hasText) buildDocumentTitle(sourceText) else getString(R.string.player_idle_title)
+        nowPlayingTitle.text = if (hasText) {
+            clipboardService?.getNowPlayingDisplayTitle() ?: getString(R.string.app_name)
+        } else {
+            getString(R.string.player_idle_title)
+        }
         chunkMetaText.text = if (totalChunks > 0) {
             getString(R.string.chunk_of_total, (chunkIndex0 + 1).coerceAtLeast(1), totalChunks)
         } else {
@@ -836,18 +846,10 @@ class MainActivity : BaseSwipeActivity() {
             TtsProviderMode.XAI -> "xAI"
             TtsProviderMode.ANDROID -> "Android"
             TtsProviderMode.AUTO -> {
-                val apiKey = preferences.getString(XaiVoiceOption.PREF_XAI_API_KEY, "").orEmpty()
+                val apiKey = XaiApiKeyStore.get(this)
                 if (apiKey.isBlank()) "Auto: Android" else "Auto: xAI"
             }
         }
-    }
-
-    private fun buildDocumentTitle(sourceText: String): String {
-        return sourceText.lineSequence()
-            .map { it.trim() }
-            .firstOrNull { it.isNotEmpty() }
-            ?.take(120)
-            ?: getString(R.string.player_idle_title)
     }
 
     private fun buildTimeEstimateText(): String {
@@ -1031,7 +1033,11 @@ class MainActivity : BaseSwipeActivity() {
         val totalChunks = clipboardService?.getTotalChunkCount() ?: 0
 
         // Title
-        pipTitle.text = if (hasText) buildDocumentTitle(sourceText) else getString(R.string.player_idle_title)
+        pipTitle.text = if (hasText) {
+            clipboardService?.getNowPlayingDisplayTitle() ?: getString(R.string.app_name)
+        } else {
+            getString(R.string.player_idle_title)
+        }
 
         // Progress
         pipChunkProgressBar.max = totalChunks.coerceAtLeast(1)
@@ -1044,7 +1050,7 @@ class MainActivity : BaseSwipeActivity() {
 
         // Status dot + label
         val (statusColor, statusString) = when {
-            isBuffering -> Pair(R.color.pasteit_accent, R.string.player_status_loading)
+            shouldShowBufferingUi() -> Pair(R.color.pasteit_accent, R.string.player_status_loading)
             isPlayingNow -> Pair(R.color.pasteit_success, R.string.player_status_playing)
             isPausedNow -> Pair(R.color.pasteit_text_dim, R.string.player_status_paused)
             hasText -> Pair(R.color.pasteit_text_dim, R.string.player_status_ready)

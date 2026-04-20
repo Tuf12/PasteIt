@@ -383,6 +383,7 @@
                             android:layout_height="wrap_content"
                             android:layout_marginStart="8dp"
                             android:layout_weight="1"
+                            android:maxLines="4"
                             android:textColor="@color/pasteit_text_dim"
                             android:textSize="13sp"
                             android:visibility="gone" />

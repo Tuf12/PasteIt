@@ -195,7 +195,7 @@ class SettingsActivity : BaseSwipeActivity() {
         xaiVoiceSpinnerProgrammatic = false
         updateXaiVoiceHint(xaiVoice)
 
-        xaiApiKeyEditText.setText(preferences.getString(XaiVoiceOption.PREF_XAI_API_KEY, "").orEmpty())
+        xaiApiKeyEditText.setText(XaiApiKeyStore.get(this))
 
         skipCodeBlocksSwitch.isChecked =
             preferences.getBoolean(SpeechFormattingPreferences.PREF_SKIP_CODE_BLOCKS, false)
@@ -319,9 +319,7 @@ class SettingsActivity : BaseSwipeActivity() {
         }
 
         xaiApiKeyEditText.doAfterTextChanged { editable ->
-            preferences.edit()
-                .putString(XaiVoiceOption.PREF_XAI_API_KEY, editable?.toString().orEmpty())
-                .apply()
+            XaiApiKeyStore.put(this, editable?.toString().orEmpty())
         }
 
         xaiApiKeyLinkText.setOnClickListener {
