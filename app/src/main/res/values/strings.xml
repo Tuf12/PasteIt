@@ -125,8 +125,11 @@
     <string name="skip_code_blocks_hint">Removes fenced code blocks from speech. Text panel is unaffected.</string>
     <string name="search_hint">Search library…</string>
     <string name="library_no_results">No results for "%1$s"</string>
-    <string name="delete_audio_cache">Delete Audio Cache</string>
-    <string name="audio_cache_deleted">Audio cache deleted</string>
+    <string name="delete_saved_item">Delete from Library</string>
+    <string name="saved_item_deleted">Library item deleted</string>
+    <string name="delete_saved_item_confirm_title">Delete library item?</string>
+    <string name="delete_saved_item_confirm_body">This removes the saved text and all related audio cache for this item.</string>
+    <string name="delete_saved_item_confirm_action">Delete</string>
     <string name="cache_badge_partial">▶ %1$d%%</string>
     <string name="export_audio">Export Audio</string>
     <string name="convert_to_mp3">Convert to MP3</string>
@@ -149,4 +152,9 @@
     <string name="time_estimate_unavailable">Elapsed --:-- · Remaining --:--</string>
     <string name="chapter_navigation_title">Jump to chapter</string>
     <string name="no_chapters_available">No chapters available yet.</string>
+    <string name="engine_label_library_cache_voice">Cache voice: %1$s</string>
+    <string name="document_meta_cache_voice">%1$s cache</string>
+    <string name="xai_voice_cache_behavior_hint">Changing xAI voice does not overwrite existing saved library audio. It creates new cache audio for the selected voice and may trigger xAI API usage. Save as a new library item if you want to keep both versions.</string>
+    <string name="xai_voice_change_dialog_title">Voice change behavior</string>
+    <string name="xai_voice_change_warning">Voice changed. Existing saved library audio stays as-is; new audio cache for this voice may use xAI API.</string>
 </resources>

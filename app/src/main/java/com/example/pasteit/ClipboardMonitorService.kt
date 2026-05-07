@@ -19,6 +19,7 @@ import android.support.v4.media.session.MediaSessionCompat
 import android.support.v4.media.session.PlaybackStateCompat
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import androidx.core.content.edit
 import androidx.media.app.NotificationCompat as MediaNotificationCompat
 
 class ClipboardMonitorService : Service() {
@@ -287,15 +288,7 @@ class ClipboardMonitorService : Service() {
             )
             return true
         }
-
-        val playable = SavedContentStore.findPlayableAudioFile(this, savedItemId) ?: return false
-        val label = "Audio file available: ${playable.name}"
-        loadSourceTextIntoState(
-            label,
-            savedItemId = savedItemId,
-            libraryDisplayTitle = document.item.title,
-        )
-        return true
+        return false
     }
 
     private fun loadSourceTextIntoState(
@@ -305,6 +298,7 @@ class ClipboardMonitorService : Service() {
     ) {
         val previousSourceText = lastSourceForDisplay
         val previousSavedItemId = activeSavedItemId
+        val promotingSessionToLibrary = previousSavedItemId == null && savedItemId != null
         val nextContentSource =
             if (savedItemId != null) ActiveContentSource.LIBRARY else ActiveContentSource.STANDARD
 
@@ -317,14 +311,17 @@ class ClipboardMonitorService : Service() {
         ttsEngine?.resetChunkCrossfade()
 
         when {
-            previousSavedItemId == null && savedItemId != null && previousSourceText == text -> {
+            promotingSessionToLibrary &&
+                shouldCarrySessionCacheIntoLibrary(previousSourceText, text) -> {
                 SessionAudioCacheStore.moveIntoSavedItem(this, savedItemId)
                 ChunkManifestStore.moveSessionIntoSavedItem(this, savedItemId)
             }
-            previousSavedItemId == null && previousSourceText.isNotEmpty() && previousSourceText != text -> {
+            promotingSessionToLibrary -> {
                 SessionAudioCacheStore.clear(this)
             }
-            previousSavedItemId == null && savedItemId != null -> {
+            previousSavedItemId == null &&
+                previousSourceText.isNotEmpty() &&
+                previousSourceText != text -> {
                 SessionAudioCacheStore.clear(this)
             }
             previousSavedItemId != null && savedItemId == null -> {
@@ -346,6 +343,9 @@ class ClipboardMonitorService : Service() {
         // the chunk list to 1 and breaks chunk-level resume for non-merged items.
         activeMergedFile = savedItemId?.let { id ->
             PasteItStoragePaths.mergedMp3File(this, id).takeIf { it.exists() }
+        }
+        if (savedItemId != null) {
+            alignVoicePreferenceToSavedLibraryCache(savedItemId, text)
         }
 
         CurrentTextPersistence.save(
@@ -376,6 +376,15 @@ class ClipboardMonitorService : Service() {
         // Media session was initialized before restore; keep metadata in sync with [notificationContentTitle].
         updateMediaSession()
         updateNotification()
+    }
+
+    /**
+     * Session -> library promotion should preserve cache when the user saves the same text and
+     * only whitespace normalization changed (for example a trimmed trailing newline).
+     */
+    private fun shouldCarrySessionCacheIntoLibrary(previousSourceText: String, nextSourceText: String): Boolean {
+        if (previousSourceText == nextSourceText) return true
+        return previousSourceText.trim() == nextSourceText.trim()
     }
 
     private fun splitTextIntoChunks(text: String): List<String> {
@@ -500,6 +509,13 @@ class ClipboardMonitorService : Service() {
                 ttsEngine?.playLocalFile(merged, "pasteit_merged")
             } else {
                 val textToSpeak = textChunks[currentPosition]
+                val cachedLibraryChunk = resolveLibraryCachedChunkFile(textToSpeak)
+                if (cachedLibraryChunk != null && cachedLibraryChunk.exists()) {
+                    Log.d("PasteItService", "Playing cached library chunk: ${cachedLibraryChunk.name}")
+                    ttsListener?.onPlaybackBuffering()
+                    ttsEngine?.playLocalFile(cachedLibraryChunk, "pasteit_$currentPosition")
+                    return
+                }
                 val prefetchNext =
                     if (currentPosition + 1 < textChunks.size) textChunks[currentPosition + 1] else null
                 Log.d("PasteItService", "Speaking chunk $currentPosition of ${textChunks.size}")
@@ -821,6 +837,25 @@ class ClipboardMonitorService : Service() {
     fun getCurrentChunkIndex(): Int = currentPosition
     fun getTotalChunkCount(): Int = textChunks.size
     fun getCurrentEngineLabel(): String = ttsEngine?.getUiEngineLabel().orEmpty()
+    fun getActiveLibraryCacheVoiceLabel(): String? {
+        if (!isLibraryItemActive()) return null
+        val counts = mutableMapOf<XaiVoiceOption, Int>()
+        textChunks.forEach { chunk ->
+            if (chunk.isBlank()) return@forEach
+            XaiVoiceOption.entries.forEach { voice ->
+                val file = SavedContentStore.audioCacheFile(
+                    context = this,
+                    savedItemId = activeSavedItemId ?: return@forEach,
+                    keyMaterial = xaiCacheKeyMaterial(voice, chunk),
+                )
+                if (file.exists()) {
+                    counts[voice] = (counts[voice] ?: 0) + 1
+                }
+            }
+        }
+        val winner = counts.maxByOrNull { it.value }?.key ?: return null
+        return winner.prefValue.replaceFirstChar { it.uppercase() }
+    }
     fun getAverageChunkDurationMs(): Long = averageChunkDurationMs
     fun getEstimatedElapsedMs(): Long = (currentPosition.toLong() * averageChunkDurationMs).coerceAtLeast(0L)
     fun getEstimatedRemainingMs(): Long {
@@ -903,18 +938,8 @@ class ClipboardMonitorService : Service() {
             return duration
         }
         if (savedItemId == null) return averageChunkDurationMs
-        val voice = XaiVoiceOption.fromPreferences(preferences)
-        val keyMaterial = listOf(
-            "provider=xai",
-            "voice=${voice.prefValue}",
-            "language=en",
-            "codec=mp3",
-            "sample_rate=44100",
-            "bit_rate=128000",
-            "text=${textChunks[chunkIndex]}",
-        ).joinToString("|")
-        val file = SavedContentStore.audioCacheFile(this, savedItemId, keyMaterial)
-        val exact = if (file.exists()) readDurationMs(file) else 0L
+        val file = resolveLibraryCachedChunkFile(textChunks[chunkIndex])
+        val exact = if (file != null && file.exists()) readDurationMs(file) else 0L
         return if (exact > 0L) exact else averageChunkDurationMs
     }
 
@@ -924,23 +949,13 @@ class ClipboardMonitorService : Service() {
 
     private fun calculateAverageChunkDurationMs(): Long {
         if (textChunks.isEmpty()) return 0L
-        val savedItemId = activeSavedItemId ?: return 0L
-        val voice = XaiVoiceOption.fromPreferences(preferences)
+        activeSavedItemId ?: return 0L
 
         var totalMs = 0L
         var count = 0
         textChunks.forEach { chunk ->
-            val keyMaterial = listOf(
-                "provider=xai",
-                "voice=${voice.prefValue}",
-                "language=en",
-                "codec=mp3",
-                "sample_rate=44100",
-                "bit_rate=128000",
-                "text=$chunk",
-            ).joinToString("|")
-            val file = SavedContentStore.audioCacheFile(this, savedItemId, keyMaterial)
-            if (!file.exists()) return@forEach
+            val file = resolveLibraryCachedChunkFile(chunk)
+            if (file == null || !file.exists()) return@forEach
             val duration = readDurationMs(file)
             if (duration > 0L) {
                 totalMs += duration
@@ -948,6 +963,62 @@ class ClipboardMonitorService : Service() {
             }
         }
         return if (count > 0) totalMs / count else 0L
+    }
+
+    private fun resolveLibraryCachedChunkFile(chunkText: String): java.io.File? {
+        val savedItemId = activeSavedItemId ?: return null
+        if (chunkText.isBlank()) return null
+
+        val preferred = XaiVoiceOption.fromPreferences(preferences)
+        val preferredFile = SavedContentStore.audioCacheFile(
+            context = this,
+            savedItemId = savedItemId,
+            keyMaterial = xaiCacheKeyMaterial(preferred, chunkText),
+        )
+        if (preferredFile.exists()) return preferredFile
+
+        XaiVoiceOption.entries.forEach { voice ->
+            if (voice == preferred) return@forEach
+            val file = SavedContentStore.audioCacheFile(
+                context = this,
+                savedItemId = savedItemId,
+                keyMaterial = xaiCacheKeyMaterial(voice, chunkText),
+            )
+            if (file.exists()) return file
+        }
+        return null
+    }
+
+    private fun xaiCacheKeyMaterial(voice: XaiVoiceOption, text: String): String =
+        listOf(
+            "provider=xai",
+            "voice=${voice.prefValue}",
+            "language=en",
+            "codec=mp3",
+            "sample_rate=44100",
+            "bit_rate=128000",
+            "text=$text",
+        ).joinToString("|")
+
+    private fun alignVoicePreferenceToSavedLibraryCache(savedItemId: String, sourceText: String) {
+        val cachedVoice = XaiCacheInspector.dominantVoiceForSavedItem(
+            context = this,
+            preferences = preferences,
+            savedItemId = savedItemId,
+            sourceText = sourceText,
+        ) ?: return
+        val currentVoice = XaiVoiceOption.fromPreferences(preferences)
+        if (currentVoice == cachedVoice) return
+
+        preferences.edit { putString(XaiVoiceOption.PREF_XAI_VOICE, cachedVoice.prefValue) }
+        ttsEngine?.applyPreferences(
+            preferences,
+            speechRateFromUi = preferences.getInt(
+                AndroidTtsEngineParams.PREF_SPEECH_RATE,
+                AndroidTtsEngineParams.DEFAULT_SPEECH_RATE_PERCENT,
+            ) / 100f,
+            onComplete = null,
+        )
     }
 
     private fun readDurationMs(file: java.io.File): Long {

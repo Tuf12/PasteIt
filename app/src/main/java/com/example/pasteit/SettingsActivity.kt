@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 import android.content.ActivityNotFoundException
 import android.net.Uri
 import android.os.Bundle
+import android.app.AlertDialog
 import android.view.View
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
@@ -217,7 +218,11 @@ class SettingsActivity : BaseSwipeActivity() {
     }
 
     private fun updateXaiVoiceHint(voice: XaiVoiceOption) {
-        xaiVoiceInfoText.text = getString(voice.hintResId)
+        xaiVoiceInfoText.text = buildString {
+            append(getString(voice.hintResId))
+            append("\n\n")
+            append(getString(R.string.xai_voice_cache_behavior_hint))
+        }
     }
 
     private fun updateCloudControls(provider: TtsProviderMode) {
@@ -298,8 +303,20 @@ class SettingsActivity : BaseSwipeActivity() {
             override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
                 if (xaiVoiceSpinnerProgrammatic) return
                 val voice = XaiVoiceOption.entries.getOrNull(position) ?: return
+                val previousVoice = XaiVoiceOption.fromPreferences(preferences)
+                if (previousVoice == voice) {
+                    updateXaiVoiceHint(voice)
+                    return
+                }
                 preferences.edit().putString(XaiVoiceOption.PREF_XAI_VOICE, voice.prefValue).apply()
                 updateXaiVoiceHint(voice)
+                if (shouldShowVoiceChangeDialog(voice)) {
+                    AlertDialog.Builder(this@SettingsActivity)
+                        .setTitle(R.string.xai_voice_change_dialog_title)
+                        .setMessage(R.string.xai_voice_change_warning)
+                        .setPositiveButton(android.R.string.ok, null)
+                        .show()
+                }
                 applySettingsToTestTts()
             }
             override fun onNothingSelected(parent: AdapterView<*>?) = Unit
@@ -348,6 +365,19 @@ class SettingsActivity : BaseSwipeActivity() {
             putInt(TextChunkingPreferences.PREF_CLOUD_CHUNK_MAX_CHARS, cloudChunkStored())
             apply()
         }
+    }
+
+    private fun shouldShowVoiceChangeDialog(selectedVoice: XaiVoiceOption): Boolean {
+        if (CurrentTextPersistence.loadContentSource(preferences) != ActiveContentSource.LIBRARY) return true
+        val savedItemId = CurrentTextPersistence.loadSavedItemId(preferences) ?: return true
+        val document = SavedContentStore(this).load(savedItemId) ?: return true
+        val dominantVoice = XaiCacheInspector.dominantVoiceForSavedItem(
+            context = this,
+            preferences = preferences,
+            savedItemId = savedItemId,
+            sourceText = document.sourceText,
+        ) ?: return true
+        return dominantVoice != selectedVoice
     }
 
     private fun applySettingsToTestTts() {
@@ -413,7 +443,13 @@ class SettingsActivity : BaseSwipeActivity() {
         val rate = speechRateSeekBar.progress / 100f
         testTTS?.applyPreferences(preferences, speechRateFromUi = rate, onComplete = null)
         testTTS?.setSpeechRate(rate)
-        testTTS?.speak(getString(R.string.test_voice_phrase_stocks), "test")
+        // Always allow live cloud synthesis here so voice checks reflect the selected xAI voice
+        // even if the app is currently pointed at a library item with no cached chunk.
+        testTTS?.speak(
+            text = getString(R.string.test_voice_phrase_stocks),
+            utteranceId = "test",
+            allowUncachedInLibrary = true,
+        )
     }
 
     override fun onDestroy() {

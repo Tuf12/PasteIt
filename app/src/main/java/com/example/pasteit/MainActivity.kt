@@ -461,8 +461,8 @@ class MainActivity : BaseSwipeActivity() {
     }
 
     private fun promptSaveCurrentText() {
-        val sourceText = clipboardService?.getCurrentSourceText().orEmpty().trim()
-        if (sourceText.isEmpty()) {
+        val sourceText = clipboardService?.getCurrentSourceText().orEmpty()
+        if (sourceText.isBlank()) {
             Toast.makeText(this, getString(R.string.no_text_to_save), Toast.LENGTH_SHORT).show()
             return
         }
@@ -631,8 +631,13 @@ class MainActivity : BaseSwipeActivity() {
         } else {
             getString(R.string.clipboard_text)
         }
-        engineBadgeText.text = clipboardService?.getCurrentEngineLabel().takeUnless { it.isNullOrBlank() }
-            ?: fallbackEngineLabel()
+        val cacheVoiceLabel = clipboardService?.getActiveLibraryCacheVoiceLabel()
+        engineBadgeText.text = if (!cacheVoiceLabel.isNullOrBlank()) {
+            getString(R.string.engine_label_library_cache_voice, cacheVoiceLabel)
+        } else {
+            clipboardService?.getCurrentEngineLabel().takeUnless { it.isNullOrBlank() }
+                ?: fallbackEngineLabel()
+        }
         timeEstimateText.text = buildTimeEstimateText()
 
         // Only update bar if user isn't dragging; polling handler handles live position.
@@ -808,12 +813,29 @@ class MainActivity : BaseSwipeActivity() {
     private fun renderDocumentMeta() {
         val sourceText = clipboardService?.getCurrentSourceText().orEmpty()
         val count = NumberFormat.getIntegerInstance().format(sourceText.length)
-        val kind = if (clipboardService?.isLibraryItemActive() == true) {
+        val service = clipboardService
+        val isLibrary = service?.isLibraryItemActive() == true
+        val kind = if (isLibrary) {
             getString(R.string.saved_text)
         } else {
             getString(R.string.clipboard_text)
         }
-        documentMetaText.text = if (sourceText.isBlank()) "0 chars" else "$count chars · $kind"
+        if (sourceText.isBlank()) {
+            documentMetaText.text = "0 chars"
+            return
+        }
+        val voiceMeta = if (isLibrary) {
+            service?.getActiveLibraryCacheVoiceLabel()?.let { voice ->
+                getString(R.string.document_meta_cache_voice, voice)
+            }
+        } else {
+            null
+        }
+        documentMetaText.text = if (voiceMeta.isNullOrBlank()) {
+            "$count chars · $kind"
+        } else {
+            "$count chars · $kind · $voiceMeta"
+        }
     }
 
     private fun renderCacheStatus() {
